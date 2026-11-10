@@ -137,7 +137,7 @@ pub fn make_mango_osd_page() -> gtk::Box {
     for (i, (key, label)) in METRICS.iter().enumerate() {
         let toggle = gtk::CheckButton::with_label(label);
         toggle.set_active(metric_enabled(&initial, key));
-        editor_grid.attach(&toggle, (i % 2) as i32, (i / 2) as i32, 1, 1);
+        editor_grid.attach(&toggle, (i % 4) as i32, (i / 4) as i32, 1, 1);
         toggles.borrow_mut().push((key, toggle));
     }
     root.append(&editor_grid);
@@ -173,11 +173,28 @@ pub fn make_mango_osd_page() -> gtk::Box {
     }
     let heading = gtk::Label::new(Some("Overlay placement"));
     heading.add_css_class("title-3"); heading.set_xalign(0.0); root.append(&heading);
-    let grid = gtk::Grid::new(); grid.set_column_spacing(24); grid.set_row_spacing(10);
-    let position = row(&grid, 0, "Position preset");
-    let offset_x = row(&grid, 1, "Horizontal offset");
-    let offset_y = row(&grid, 2, "Vertical offset");
-    let alpha = row(&grid, 3, "Background opacity");
+    // Four equally expanding columns: centered headings above centered read-only values.
+    let grid = gtk::Grid::new();
+    grid.set_column_spacing(12);
+    grid.set_row_spacing(6);
+    let mut placement_values = Vec::new();
+    for (column, heading) in ["Position preset", "Horizontal offset", "Vertical offset", "Background opacity"].iter().enumerate() {
+        let heading_label = gtk::Label::new(Some(heading));
+        heading_label.set_xalign(0.5);
+        heading_label.set_hexpand(true);
+        grid.attach(&heading_label, column as i32, 0, 1, 1);
+        let value_label = gtk::Label::new(Some("Not loaded"));
+        value_label.set_xalign(0.5);
+        value_label.set_hexpand(true);
+        value_label.set_wrap(true);
+        value_label.add_css_class("dim-label");
+        grid.attach(&value_label, column as i32, 1, 1, 1);
+        placement_values.push(value_label);
+    }
+    let position = placement_values[0].clone();
+    let offset_x = placement_values[1].clone();
+    let offset_y = placement_values[2].clone();
+    let alpha = placement_values[3].clone();
     root.append(&grid);
     // v1.0: top-left-origin positioning sandbox, strictly preview-only.
     // Slider bounds follow a user-selected viewport size; exact coordinate entry
@@ -426,9 +443,25 @@ pub fn make_mango_osd_page() -> gtk::Box {
 
     let metrics_title = gtk::Label::new(Some("Metrics"));
     metrics_title.add_css_class("title-3"); metrics_title.set_xalign(0.0); root.append(&metrics_title);
-    let metrics = gtk::Grid::new(); metrics.set_column_spacing(24); metrics.set_row_spacing(8);
+    let metrics = gtk::Grid::new();
+    metrics.set_column_spacing(16);
+    metrics.set_row_spacing(8);
     let keys = ["fps", "frame_timing", "gpu_stats", "gpu_temp", "cpu_stats", "cpu_temp", "vram", "ram"];
-    let labels: Vec<gtk::Label> = keys.iter().enumerate().map(|(i, key)| row(&metrics, i as i32, key)).collect();
+    let mut labels: Vec<gtk::Label> = Vec::new();
+    for (i, key) in keys.iter().enumerate() {
+        let item = gtk::Box::new(gtk::Orientation::Vertical, 3);
+        item.set_hexpand(true);
+        let name = gtk::Label::new(Some(key));
+        name.set_xalign(0.5);
+        let status = gtk::Label::new(Some("Not loaded"));
+        status.set_xalign(0.5);
+        status.set_wrap(true);
+        status.add_css_class("dim-label");
+        item.append(&name);
+        item.append(&status);
+        metrics.attach(&item, (i % 4) as i32, (i / 4) as i32, 1, 1);
+        labels.push(status);
+    }
     root.append(&metrics);
     let caveat = gtk::Label::new(Some("This preview reads only the first accessible global configuration file. MangoHud can also use per-game configs, environment overrides, and Flatpak-specific settings. The editor is preview-only. Actual MangoHud placement is constrained by its renderer and must be investigated before enabling Apply."));
     caveat.set_xalign(0.0); caveat.set_wrap(true); caveat.add_css_class("dim-label"); root.append(&caveat);
@@ -440,7 +473,7 @@ pub fn make_mango_osd_page() -> gtk::Box {
             offset_y.set_text(config_value(&content, "offset_y").unwrap_or("default (not explicitly set)"));
             alpha.set_text(config_value(&content, "background_alpha").unwrap_or("default (not explicitly set)"));
             for (key, label) in keys.iter().zip(labels.iter()) {
-                label.set_text(if metric_enabled(&content, key) { "Enabled" } else { "Not explicitly enabled in this file" });
+                label.set_text(if metric_enabled(&content, key) { "Enabled" } else { "Not enabled" });
             }
         } else {
             source.set_text("No readable global MangoHud configuration found. The game may use defaults, a per-game file, or Flatpak settings.");
