@@ -30,6 +30,9 @@ jobs:
       - name: Build the unified GUI executable
         run: cargo build --locked --release -p lact-gui
 
+      - name: Show release build files
+        run: ls -lah target/release/
+
       - name: Upload Linux executable
         uses: actions/upload-artifact@v4
         with:
