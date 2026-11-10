@@ -51,3 +51,32 @@ Bug reports, improvements, and pull requests are welcome.
 
 Built upon the open-source LACT project, with additional
 interface and integration functionality.
+
+## Open Source and Attribution
+
+Unified GPU Control is based on LACT, originally developed
+by Ilya Zlobintsev.
+
+Original LACT project:
+https://github.com/ilya-zlobintsev/LACT
+
+UGC is an independent derivative project and is not
+an official LACT release.
+
+The original MIT license and copyright notice are
+preserved in the LICENSE file.
+
+The original LACT README is preserved at:
+docs/LACT-Original-README.md
+
+## Hardware Safety
+
+ASUS ROG Astral monitoring and guard integration
+requires compatible hardware and separately installed
+supporting components.
+
+Unified GPU Control does not replace the Astral Guard
+emergency shutdown service.
+
+Always verify that hardware protection services
+are functioning independently of the GUI.
