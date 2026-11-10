@@ -9,8 +9,8 @@ fn config_candidates() -> Vec<PathBuf> {
         if !xdg.is_empty() { paths.push(PathBuf::from(xdg).join("MangoHud/MangoHud.conf")); }
     }
     if let Ok(home) = env::var("HOME") {
-        paths.push(PathBuf::from(home).join(".config/MangoHud/MangoHud.conf"));
-        paths.push(PathBuf::from(home).join(".config/MangoHud.conf"));
+        paths.push(PathBuf::from(&home).join(".config/MangoHud/MangoHud.conf"));
+        paths.push(PathBuf::from(&home).join(".config/MangoHud.conf"));
     }
     paths.push(PathBuf::from("/etc/MangoHud.conf"));
     paths
