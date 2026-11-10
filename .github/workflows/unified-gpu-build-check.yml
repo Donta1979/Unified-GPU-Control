@@ -1,8 +1,6 @@
 
 name: Unified GPU Control - Manual Build Check
 
-# Runs only when manually started on GitHub.
-# Does not install or change anything on your PC.
 on:
   workflow_dispatch:
 
@@ -10,33 +8,73 @@ permissions:
   contents: read
 
 jobs:
-  compile-gui:
+  ubuntu-build:
+    name: Ubuntu reference build
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up LACT Linux dependencies and Rust cache
+      - name: Set up LACT dependencies
         uses: ./.github/actions/setup-environment
 
-      - name: Show compiler version
-        run: rustc --version && cargo --version
-
-      - name: Compile-check the unified GUI
+      - name: Compile-check GUI
         run: cargo check --locked -p lact-gui
 
-      - name: Build the unified GUI executable
+      - name: Build application
         run: cargo build --locked --release -p lact
 
-      - name: Show release build files
-        run: ls -lah target/release/
-
-      - name: Upload Linux executable
+      - name: Upload Ubuntu executable
         uses: actions/upload-artifact@v4
         with:
-          name: Unified-GPU-Control-Linux-x86_64
+          name: Unified-GPU-Control-Ubuntu-x86_64
+          path: target/release/lact
+          if-no-files-found: error
+          retention-days: 14
+
+  fedora-build:
+    name: Fedora 45 Bazzite-compatible build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: fedora:45
+    steps:
+      - name: Install Fedora build dependencies
+        run: |
+          dnf install -y git curl gcc gcc-c++ clang make pkgconf-pkg-config gtk4-devel libadwaita-devel libdisplay-info-devel vulkan-loader-devel libdrm-devel rustup file
+
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Check display library version
+        run: |
+          rpm -q libdisplay-info libdisplay-info-devel
+          pkg-config --modversion libdisplay-info
+
+      - name: Build Fedora executable
+        run: cargo +stable build --locked --release -p lact
+
+      - name: Verify executable dependencies
+        run: |
+          file target/release/lact
+          ldd target/release/lact
+          ldd target/release/lact | grep 'libdisplay-info.so.3'
+          if ldd target/release/lact | grep -q 'not found'; then
+            exit 1
+          fi
+
+      - name: Upload Fedora executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unified-GPU-Control-Fedora45-x86_64
           path: target/release/lact
           if-no-files-found: error
           retention-days: 14
