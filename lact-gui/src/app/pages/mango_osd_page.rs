@@ -155,7 +155,7 @@ fn launch_osd_test() -> Result<&'static str, String> {
         cmd.arg("--dlsym");
     }
     cmd.arg(program);
-    if program == "vkcube" { cmd.arg("--fullscreen"); }
+    if program == "vkcube" { cmd.args(["--width", "3440", "--height", "1440"]); }
     // A test window must not change UGC, LACT, or MangoHud settings.
     cmd.spawn().map_err(|e| format!("Could not start MangoHud test: {e}"))?;
     Ok(description)
