@@ -110,7 +110,11 @@ pub fn make_astral_page() -> gtk::Box {
     safety_actions.append(&configure);
     root.append(&safety_actions);
     let siren = gtk::Button::with_label("Test Siren (no shutdown)");
-    root.append(&siren);
+    let notifier_repair = gtk::Button::with_label("Repair Desktop Notifier");
+    let notifier_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    notifier_row.append(&siren);
+    notifier_row.append(&notifier_repair);
+    root.append(&notifier_row);
     let manager_status = gtk::Label::new(Some("A critical shutdown is never simulated by this page. Configuration changes require graphical administrator authorization."));
     manager_status.set_xalign(0.0);
     manager_status.set_wrap(true);
@@ -204,6 +208,50 @@ pub fn make_astral_page() -> gtk::Box {
                 if !Path::new(helper).is_file() { status(&result, "Root repair helper missing", "error"); return; }
                 background_action(result.clone(), "Reinstall", vec!["/usr/bin/python3".into(), helper.into(), "reinstall".into()]);
             });
+        });
+    }
+    {
+        let result = manager_status.clone();
+        notifier_repair.connect_clicked(move |_| {
+            let result = result.clone();
+            confirm_action("Repair desktop notifier?",
+                "Restore the desktop notification launcher, siren and user service from the bundled UGC files. This does not change the independent root emergency shutdown protection.",
+                move || {
+                    let script = std::env::var_os("HOME").map(PathBuf::from)
+                        .map(|home| home.join(".local/share/ugc/astral-notifier-repair.sh"));
+                    let Some(script) = script.filter(|p| p.is_file()) else {
+                        status(&result, "Notifier repair package is missing. Reinstall the UGC Stage 4 notifier component.", "error");
+                        return;
+                    };
+                    status(&result, "Desktop notifier repair in progress…", "warning");
+                    let (tx, rx) = mpsc::channel();
+                    thread::spawn(move || {
+                        let answer = Command::new("/usr/bin/bash").arg(&script).output()
+                            .map(|output| (output.status.success(), format!("{}{}",
+                                String::from_utf8_lossy(&output.stdout),
+                                String::from_utf8_lossy(&output.stderr))));
+                        let _ = tx.send(answer);
+                    });
+                    glib::timeout_add_local(Duration::from_millis(200), move || match rx.try_recv() {
+                        Ok(Ok((true, details))) => {
+                            status(&result, &format!("Desktop notifier: {}", details.trim()), "success");
+                            glib::ControlFlow::Break
+                        }
+                        Ok(Ok((false, details))) => {
+                            status(&result, &format!("Desktop notifier repair FAILED: {}", details.trim()), "error");
+                            glib::ControlFlow::Break
+                        }
+                        Ok(Err(e)) => {
+                            status(&result, &format!("Desktop notifier repair FAILED: {e}"), "error");
+                            glib::ControlFlow::Break
+                        }
+                        Err(mpsc::TryRecvError::Disconnected) => {
+                            status(&result, "Desktop notifier repair worker disconnected", "error");
+                            glib::ControlFlow::Break
+                        }
+                        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                    });
+                });
         });
     }
     {
