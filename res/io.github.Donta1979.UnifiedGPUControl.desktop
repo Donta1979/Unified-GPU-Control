@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Unified GPU Control
+GenericName=GPU Control Application
+Comment=GPU monitoring and management
+Exec=ugc gui
+Icon=io.github.Donta1979.UnifiedGPUControl
+StartupWMClass=io.github.Donta1979.UnifiedGPUControl
+Terminal=false
+Categories=System;Settings;
+Keywords=GPU;NVIDIA;AMD;MangoHud;

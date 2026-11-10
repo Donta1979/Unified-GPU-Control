@@ -17,31 +17,24 @@ build-release-headless:
 
 .PHONY: install-resources
 install-resources:
-	install -Dm644 res/lactd.service $(DESTDIR)$(PREFIX)/lib/systemd/system/lactd.service
-	install -Dm644 res/io.github.ilya_zlobintsev.LACT.desktop $(DESTDIR)$(PREFIX)/share/applications/io.github.ilya_zlobintsev.LACT.desktop
-	install -Dm644 res/io.github.ilya_zlobintsev.LACT.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/io.github.ilya_zlobintsev.LACT.png
-	install -Dm644 res/io.github.ilya_zlobintsev.LACT.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/io.github.ilya_zlobintsev.LACT.svg
-	install -Dm644 res/io.github.ilya_zlobintsev.LACT.metainfo.xml $(DESTDIR)$(PREFIX)/share/metainfo/io.github.ilya_zlobintsev.LACT.metainfo.xml
-	install -Dm644 res/io.github.ilya_zlobintsev.LACT.policy $(DESTDIR)$(PREFIX)/share/polkit-1/actions/io.github.ilya_zlobintsev.LACT.policy
+	install -Dm644 res/io.github.Donta1979.UnifiedGPUControl.desktop $(DESTDIR)$(PREFIX)/share/applications/io.github.Donta1979.UnifiedGPUControl.desktop
+	install -Dm644 res/io.github.Donta1979.UnifiedGPUControl.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/io.github.Donta1979.UnifiedGPUControl.png
+	install -Dm644 res/io.github.Donta1979.UnifiedGPUControl.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/io.github.Donta1979.UnifiedGPUControl.svg
 
 .PHONY: install
 install: install-resources
-	install -Dm755 target/release/lact $(DESTDIR)$(PREFIX)/bin/lact
+	install -Dm755 target/release/lact $(DESTDIR)$(PREFIX)/bin/ugc
 
 .PHONY: install-debug
 install-debug: install-resources
-	install -Dm755 target/debug/lact $(DESTDIR)$(PREFIX)/bin/lact
+	install -Dm755 target/debug/lact $(DESTDIR)$(PREFIX)/bin/ugc
 
 .PHONY: uninstall
 uninstall:
-	rm $(DESTDIR)$(PREFIX)/bin/lact
-	rm $(DESTDIR)$(PREFIX)/lib/systemd/system/lactd.service
-	rm $(DESTDIR)$(PREFIX)/share/applications/io.github.ilya_zlobintsev.LACT.desktop
-	rm -f $(DESTDIR)$(PREFIX)/share/pixmaps/io.github.ilya_zlobintsev.LACT.png
-	rm $(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/io.github.ilya_zlobintsev.LACT.png
-	rm $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/io.github.ilya_zlobintsev.LACT.svg
-	rm $(DESTDIR)$(PREFIX)/share/metainfo/io.github.ilya_zlobintsev.LACT.metainfo.xml
-	rm $(DESTDIR)$(PREFIX)/share/polkit-1/actions/io.github.ilya_zlobintsev.LACT.policy
+	rm -f $(DESTDIR)$(PREFIX)/bin/ugc
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/io.github.Donta1979.UnifiedGPUControl.desktop
+	rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/io.github.Donta1979.UnifiedGPUControl.png
+	rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/io.github.Donta1979.UnifiedGPUControl.svg
 
 .PHONY: update-vulkan-schema
 update-vulkan-schema:

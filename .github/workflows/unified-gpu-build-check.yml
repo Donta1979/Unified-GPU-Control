@@ -25,11 +25,19 @@ jobs:
       - name: Build application
         run: cargo build --locked --release -p lact
 
+      - name: Package UGC application
+        run: |
+          mkdir -p dist/ugc-package
+          cp target/release/lact dist/ugc-package/ugc
+          cp res/io.github.Donta1979.UnifiedGPUControl.desktop dist/ugc-package/
+          cp res/io.github.Donta1979.UnifiedGPUControl.png dist/ugc-package/
+          cp res/io.github.Donta1979.UnifiedGPUControl.svg dist/ugc-package/
+
       - name: Upload Ubuntu executable
         uses: actions/upload-artifact@v4
         with:
           name: Unified-GPU-Control-Ubuntu-x86_64
-          path: target/release/lact
+          path: dist/ugc-package/
           if-no-files-found: error
           retention-days: 14
 
@@ -69,10 +77,18 @@ jobs:
             exit 1
           fi
 
+      - name: Package UGC application
+        run: |
+          mkdir -p dist/ugc-package
+          cp target/release/lact dist/ugc-package/ugc
+          cp res/io.github.Donta1979.UnifiedGPUControl.desktop dist/ugc-package/
+          cp res/io.github.Donta1979.UnifiedGPUControl.png dist/ugc-package/
+          cp res/io.github.Donta1979.UnifiedGPUControl.svg dist/ugc-package/
+
       - name: Upload Fedora executable
         uses: actions/upload-artifact@v4
         with:
           name: Unified-GPU-Control-Fedora45-x86_64
-          path: target/release/lact
+          path: dist/ugc-package/
           if-no-files-found: error
           retention-days: 14

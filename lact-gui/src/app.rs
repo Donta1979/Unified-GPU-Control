@@ -400,9 +400,10 @@ impl AsyncComponent for AppModel {
             .expect("Could not list devices");
         let initial_gpu_id = AppModel::init_gpu_selection(&devices);
 
-        if !system_info.version.is_current() && !daemon_config_shown {
-            sender.input(AppMsg::ShowServiceSetupDialog);
-        }
+        // UGC uses a custom GUI build with the upstream LACT daemon.
+        // Preserve manual Service Setup and version warnings, but do not
+        // automatically open setup solely because build versions differ.
+        let _ = daemon_config_shown;
 
         let info_page = InformationPage::detach_default();
 
