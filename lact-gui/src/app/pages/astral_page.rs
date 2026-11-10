@@ -232,6 +232,7 @@ pub fn make_astral_page() -> gtk::Box {
                                 String::from_utf8_lossy(&output.stderr))));
                         let _ = tx.send(answer);
                     });
+                    let result = result.clone();
                     glib::timeout_add_local(Duration::from_millis(200), move || match rx.try_recv() {
                         Ok(Ok((true, details))) => {
                             status(&result, &format!("Desktop notifier: {}", details.trim()), "success");
