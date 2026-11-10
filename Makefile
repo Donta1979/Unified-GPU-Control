@@ -19,7 +19,6 @@ build-release-headless:
 install-resources:
 	install -Dm644 res/io.github.Donta1979.UnifiedGPUControl.desktop $(DESTDIR)$(PREFIX)/share/applications/io.github.Donta1979.UnifiedGPUControl.desktop
 	install -Dm644 res/io.github.Donta1979.UnifiedGPUControl.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/io.github.Donta1979.UnifiedGPUControl.png
-	install -Dm644 res/io.github.Donta1979.UnifiedGPUControl.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/io.github.Donta1979.UnifiedGPUControl.svg
 
 .PHONY: install
 install: install-resources
