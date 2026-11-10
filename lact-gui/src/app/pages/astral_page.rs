@@ -159,10 +159,9 @@ pub fn make_astral_page() -> gtk::Box {
                     result.set_text("Administrator helper missing. No changes made.");
                     return;
                 }
-                match Command::new("pkexec").args(["/usr/bin/python3", helper, "configure", &seconds]).spawn() {
-                    Ok(_) => result.set_text("Authorization requested. Verify the countdown in the service configuration after the operation finishes; launch alone does not confirm success."),
-                    Err(e) => result.set_text(&format!("Could not request authorization: {e}. No change confirmed.")),
-                }
+                background_action(result.clone(), "Shutdown countdown", vec![
+                    "/usr/bin/python3".into(), helper.into(), "configure".into(), seconds.clone()
+                ]);
             });
             dialog.present();
         });
@@ -170,7 +169,22 @@ pub fn make_astral_page() -> gtk::Box {
 
     {
         let result = manager_status.clone();
-        refresh.connect_clicked(move |_| result.set_text("Refresh requested. Live pins update every 2 seconds; protection checks every 5 seconds."));
+        refresh.connect_clicked(move |_| {
+            let now = glib::DateTime::now_local()
+                .and_then(|dt| dt.format("%H:%M:%S"))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|_| "now".into());
+            let timer = unit_active("astral-guard.timer");
+            let enabled = unit_enabled("astral-guard.timer");
+            let pins = sensor_dir().is_some();
+            let message = format!(
+                "Manual refresh {now}: sensor {}, timer {}, startup {}. Live pins and protection checks also refresh automatically.",
+                if pins { "detected" } else { "MISSING" },
+                if timer { "active" } else { "INACTIVE" },
+                if enabled { "enabled" } else { "DISABLED" }
+            );
+            status(&result, &message, if pins && timer && enabled { "success" } else { "warning" });
+        });
     }
     {
         let result = manager_status.clone();
@@ -185,7 +199,7 @@ pub fn make_astral_page() -> gtk::Box {
         let result = manager_status.clone();
         reinstall.connect_clicked(move |_| {
             let result = result.clone();
-            confirm_action("Install / Reinstall Protection", "Only use if protection is broken. The existing root helper rebuilds the driver and replaces safety units. Its SELinux path and rollback handling require further hardening; a working installation should not be reinstalled. Continue anyway?", move || {
+            confirm_action("Install / Reinstall Protection", "Only use if protection is broken. The existing root helper rebuilds the driver and replaces safety units. This recovery path has not been end-to-end tested; a working installation should not be reinstalled. Continue anyway?", move || {
                 let helper = "/usr/local/lib/astral-guard-manager/admin.py";
                 if !Path::new(helper).is_file() { status(&result, "Root repair helper missing", "error"); return; }
                 background_action(result.clone(), "Reinstall", vec!["/usr/bin/python3".into(), helper.into(), "reinstall".into()]);
