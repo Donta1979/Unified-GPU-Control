@@ -28,7 +28,7 @@ jobs:
         run: cargo check --locked -p lact-gui
 
       - name: Build the unified GUI executable
-        run: cargo build --locked --release -p lact-gui
+        run: cargo build --locked --release -p lact
 
       - name: Show release build files
         run: ls -lah target/release/
