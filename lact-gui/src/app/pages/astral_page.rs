@@ -177,7 +177,7 @@ pub fn make_astral_page() -> gtk::Box {
         startup.connect_clicked(move |_| {
             let result = result.clone();
             confirm_action("Enable / Repair Startup", "This enables and starts the existing Astral services. If the guard detects a real CRITICAL condition, the independent shutdown protection may activate. Continue?", move || {
-                background_action(result, "Startup repair", vec!["/usr/bin/systemctl".into(), "enable".into(), "--now".into(), "astral-hwmon.service".into(), "astral-guard.timer".into()]);
+                background_action(result.clone(), "Startup repair", vec!["/usr/bin/systemctl".into(), "enable".into(), "--now".into(), "astral-hwmon.service".into(), "astral-guard.timer".into()]);
             });
         });
     }
@@ -188,7 +188,7 @@ pub fn make_astral_page() -> gtk::Box {
             confirm_action("Install / Reinstall Protection", "Only use if protection is broken. The existing root helper rebuilds the driver and replaces safety units. Its SELinux path and rollback handling require further hardening; a working installation should not be reinstalled. Continue anyway?", move || {
                 let helper = "/usr/local/lib/astral-guard-manager/admin.py";
                 if !Path::new(helper).is_file() { status(&result, "Root repair helper missing", "error"); return; }
-                background_action(result, "Reinstall", vec!["/usr/bin/python3".into(), helper.into(), "reinstall".into()]);
+                background_action(result.clone(), "Reinstall", vec!["/usr/bin/python3".into(), helper.into(), "reinstall".into()]);
             });
         });
     }
