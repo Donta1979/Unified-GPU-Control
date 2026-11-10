@@ -176,7 +176,7 @@ impl AsyncComponent for AppModel {
             .default_height(CONFIG.read().window_size.map_or(DEFAULT_WINDOW_HEIGHT, |size| size.height))
             .default_width(CONFIG.read().window_size.map_or(DEFAULT_WINDOW_WIDTH, |size| size.width))
             .icon_name(APP_ID)
-            .title("UGC — Universal GPU Control")
+            .title("UGC")
             .build() {
                 #[name = "toast_overlay"]
                 adw::ToastOverlay {
@@ -193,7 +193,7 @@ impl AsyncComponent for AppModel {
 
                         #[wrap(Some)]
                         set_sidebar = &adw::NavigationPage {
-                            set_title: "UGC — Universal GPU Control",
+                            set_title: "UGC",
 
                             #[wrap(Some)]
                             #[name = "sidebar_view"]
