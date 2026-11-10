@@ -42,15 +42,13 @@ jobs:
     steps:
       - name: Install Fedora build dependencies
         run: |
-          dnf install -y git curl gcc gcc-c++ clang make pkgconf-pkg-config gtk4-devel libadwaita-devel libdisplay-info-devel vulkan-loader-devel libdrm-devel rustup file
+          dnf install -y git curl gcc gcc-c++ clang make pkgconf-pkg-config gtk4-devel libadwaita-devel libdisplay-info-devel vulkan-loader-devel libdrm-devel rust cargo file
 
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Check Fedora Rust toolchain
         run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
           rustc --version
           cargo --version
 
@@ -60,7 +58,7 @@ jobs:
           pkg-config --modversion libdisplay-info
 
       - name: Build Fedora executable
-        run: cargo +stable build --locked --release -p lact
+        run: cargo build --locked --release -p lact
 
       - name: Verify executable dependencies
         run: |
