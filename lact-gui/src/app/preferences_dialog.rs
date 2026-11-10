@@ -189,6 +189,34 @@ impl relm4::Component for PreferencesDialog {
                 },
 
                 add = &adw::PreferencesGroup {
+                    set_title: "Backup & Restore",
+
+                    adw::ActionRow {
+                        set_title: "Export Settings",
+                        set_subtitle: "Back up UGC preferences and GPU profiles",
+                        set_activatable: true,
+                        add_suffix = &gtk::Image {
+                            set_icon_name: Some("document-save-symbolic"),
+                        },
+                        connect_activated => move |_| {
+                            APP_BROKER.send(AppMsg::ExportSettings);
+                        },
+                    },
+
+                    adw::ActionRow {
+                        set_title: "Import Settings",
+                        set_subtitle: "Restore settings from a UGC backup file",
+                        set_activatable: true,
+                        add_suffix = &gtk::Image {
+                            set_icon_name: Some("document-open-symbolic"),
+                        },
+                        connect_activated => move |_| {
+                            APP_BROKER.send(AppMsg::ImportSettings);
+                        },
+                    },
+                },
+
+                add = &adw::PreferencesGroup {
                     set_title: &fl!(I18N, "daemon"),
 
                     adw::ActionRow {

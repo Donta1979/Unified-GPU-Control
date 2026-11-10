@@ -9,6 +9,7 @@ mod overdrive_dialog;
 mod page_navigation;
 pub(crate) mod pages;
 mod preferences_dialog;
+mod settings_backup;
 mod process_monitor;
 mod profiles;
 pub(crate) mod utils;
@@ -142,6 +143,7 @@ pub struct AppModel {
 #[derive(Debug)]
 pub enum CommandOutput {
     ProfileImport(PathBuf),
+    SettingsImportSelected(PathBuf),
     Error(anyhow::Error),
 }
 
@@ -691,6 +693,66 @@ impl AppModel {
             AppMsg::ShowPreferencesDialog => {
                 self.preferences_dialog.emit(PreferencesDialogMsg::Show);
             }
+            AppMsg::ImportSettings => {
+                let settings = OpenDialogSettings {
+                    is_modal: true,
+                    ..Default::default()
+                };
+
+                let dialog = OpenDialog::launch(settings);
+                dialog.emit(OpenDialogMsg::Open);
+
+                let stream = dialog.into_stream();
+
+                sender.oneshot_command(async move {
+                    if let Some(OpenDialogResponse::Accept(path)) =
+                        stream.recv_one().await
+                    {
+                        Some(CommandOutput::SettingsImportSelected(path))
+                    } else {
+                        None
+                    }
+                });
+            }
+            AppMsg::ExportSettings => {
+                let backup =
+                    settings_backup::collect_backup(&self.daemon_client).await?;
+
+                let settings = SaveDialogSettings {
+                    create_folders: true,
+                    is_modal: true,
+                    ..Default::default()
+                };
+
+                let dialog = SaveDialog::launch(settings);
+                dialog.emit(SaveDialogMsg::SaveAs(
+                    "Unified-GPU-Control-Settings.json".to_owned(),
+                ));
+
+                let stream = dialog.into_stream();
+
+                sender.oneshot_command(async move {
+                    if let Some(SaveDialogResponse::Accept(path)) =
+                        stream.recv_one().await
+                    {
+                        let result = (|| -> anyhow::Result<()> {
+                            let contents = serde_json::to_string_pretty(&backup)
+                                .context("Could not serialize settings backup")?;
+
+                            fs::write(&path, contents)
+                                .context("Could not export UGC settings")?;
+
+                            Ok(())
+                        })();
+
+                        if let Err(err) = result {
+                            return Some(CommandOutput::Error(err));
+                        }
+                    }
+
+                    None
+                });
+            }
             AppMsg::ExperimentalFeaturesChanged => {
                 sender.input(AppMsg::ReloadData { full: false });
             }
@@ -984,6 +1046,68 @@ impl AppModel {
         sender: &AsyncComponentSender<AppModel>,
     ) -> anyhow::Result<()> {
         match msg {
+            CommandOutput::SettingsImportSelected(path) => {
+                let contents = fs::read_to_string(&path)
+                    .context("Could not read UGC settings backup")?;
+
+                let backup =
+                    serde_json::from_str::<settings_backup::SettingsBackup>(&contents)
+                        .context("Could not parse UGC settings backup")?;
+
+                backup.validate()?;
+
+                info!(
+                    "Validated UGC settings backup: {} GPU profiles",
+                    backup.profile_count()
+                );
+
+                let dialog = adw::AlertDialog::builder()
+                    .heading("Import UGC Settings?")
+                    .body(format!(
+                        "This backup contains {} named GPU profiles.\n\n\
+                         Imported profiles will receive new names. Existing profiles, \
+                         the default profile, and active GPU settings will not be replaced.\n\n\
+                         Automatic switching rules and hooks will be disabled on imported profiles.\n\n\
+                         GUI preferences will be restored. Restart UGC afterward to apply all interface changes.",
+                        backup.profiles.len()
+                    ))
+                    .default_response("cancel")
+                    .close_response("cancel")
+                    .build();
+
+                dialog.add_responses(&[
+                    ("cancel", "Cancel"),
+                    ("import", "Import Settings"),
+                ]);
+
+                dialog.set_response_appearance(
+                    "import",
+                    adw::ResponseAppearance::Suggested,
+                );
+
+                let window = self.application.active_window();
+
+                if let Some(window) = window {
+                    let response = dialog.choose_future(Some(&window)).await;
+
+                    if response == "import" {
+                        let restored =
+                            settings_backup::restore_profiles_safely(
+                                &self.daemon_client,
+                                &backup,
+                            )
+                            .await?;
+
+                        settings_backup::restore_ui_preferences(&backup)?;
+
+                        info!("Restored GUI preferences and {restored} GPU profiles from UGC backup");
+
+                        sender.input(AppMsg::ReloadProfiles {
+                            state_sender: None,
+                        });
+                    }
+                }
+            }
             CommandOutput::ProfileImport(path) => {
                 let file_name = path
                     .file_name()
