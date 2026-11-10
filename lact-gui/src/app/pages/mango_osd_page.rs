@@ -1,7 +1,7 @@
-//! Read-only MangoHud configuration overview. Never writes files or launches other apps.
+//! MangoHud settings editor. Writes only user-owned configuration after explicit Apply.
 use adw::prelude::*;
 use gtk::{self, glib};
-use std::{env, fs, path::{Path, PathBuf}};
+use std::{env, fs, path::{Path, PathBuf}, rc::Rc, cell::RefCell};
 
 fn config_candidates() -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -62,20 +62,115 @@ fn row(grid: &gtk::Grid, index: i32, name: &str) -> gtk::Label {
     value
 }
 
+// Preserve unknown MangoHud options and comments while changing only selected keys.
+fn set_option(content: &str, key: &str, enabled: bool) -> String {
+    let mut lines: Vec<String> = content.lines().map(str::to_owned).collect();
+    let mut found = false;
+    for line in &mut lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || trimmed.starts_with(';') { continue; }
+        let option = trimmed.split_once('=').map(|(k, _)| k.trim()).unwrap_or(trimmed);
+        if option == key {
+            if !found { *line = format!("{key}={}", if enabled { "1" } else { "0" }); found = true; }
+            else { *line = format!("# UGC: superseded duplicate: {line}"); }
+        }
+    }
+    if !found { lines.push(format!("{key}={}", if enabled { "1" } else { "0" })); }
+    let mut result = lines.join("\n");
+    result.push('\n');
+    result
+}
+
+fn save_mangohud(content: &str) -> Result<PathBuf, String> {
+    // Never write a system-wide file. Only the current user's config is managed.
+    let home = env::var("HOME").map_err(|e| e.to_string())?;
+    let base = env::var("XDG_CONFIG_HOME").ok().filter(|v| !v.is_empty())
+        .map(PathBuf::from).unwrap_or_else(|| PathBuf::from(home).join(".config"));
+    let path = base.join("MangoHud/MangoHud.conf");
+    let dir = path.parent().ok_or("Invalid config directory")?;
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // Refuse symlinks: don't follow a malicious or accidental redirect.
+    if path.is_symlink() { return Err("Configuration is a symlink; refusing to overwrite it".into()); }
+    if path.exists() {
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?.as_secs();
+        let backup = dir.join(format!("MangoHud.conf.ugc-backup-{stamp}"));
+        fs::copy(&path, backup).map_err(|e| format!("Backup failed: {e}"))?;
+    }
+    let staged = dir.join(format!(".MangoHud.conf.ugc-{}", std::process::id()));
+    fs::write(&staged, content).map_err(|e| e.to_string())?;
+    fs::rename(&staged, &path).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 pub fn make_mango_osd_page() -> gtk::Box {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 14);
     root.set_margin_top(20);
     root.set_margin_bottom(20);
     root.set_margin_start(20);
     root.set_margin_end(20);
-    let title = gtk::Label::new(Some("MangoJuice OSD"));
+    let title = gtk::Label::new(Some("MangoHud OSD — Settings"));
     title.add_css_class("title-2");
     title.set_xalign(0.0);
     root.append(&title);
-    let note = gtk::Label::new(Some("Integrated read-only preview of your MangoHud settings. No external windows, file changes, or GPU controls."));
+    let note = gtk::Label::new(Some("Configure MangoHud metrics below. Changes are written only after you select Save; existing settings are backed up."));
     note.set_wrap(true); note.set_xalign(0.0); root.append(&note);
     let source = gtk::Label::new(Some("Checking configuration…"));
     source.set_xalign(0.0); source.set_wrap(true); root.append(&source);
+    let editor_title = gtk::Label::new(Some("Metric visibility"));
+    editor_title.add_css_class("title-3"); editor_title.set_xalign(0.0); root.append(&editor_title);
+    let editor_note = gtk::Label::new(Some("Select metrics to show in MangoHud. Save creates a timestamped backup and preserves other configuration entries. Per-game overrides may take precedence."));
+    editor_note.set_wrap(true); editor_note.set_xalign(0.0); root.append(&editor_note);
+    let editor_grid = gtk::Grid::new();
+    editor_grid.set_row_spacing(8); editor_grid.set_column_spacing(18);
+    const METRICS: &[(&str, &str)] = &[
+        ("fps", "FPS"), ("frame_timing", "Frame timing"),
+        ("gpu_stats", "GPU statistics"), ("gpu_temp", "GPU temperature"),
+        ("gpu_core_clock", "GPU core clock"), ("gpu_mem_clock", "GPU memory clock"),
+        ("gpu_power", "GPU power"), ("gpu_fan", "GPU fan"),
+        ("cpu_stats", "CPU statistics"), ("cpu_temp", "CPU temperature"),
+        ("cpu_mhz", "CPU clock"), ("vram", "VRAM usage"),
+        ("ram", "System RAM"), ("frametime", "Frametime graph"),
+    ];
+    let toggles: Rc<RefCell<Vec<(&'static str, gtk::CheckButton)>>> = Rc::new(RefCell::new(Vec::new()));
+    let initial = read_config().map(|(_, c)| c).unwrap_or_default();
+    for (i, (key, label)) in METRICS.iter().enumerate() {
+        let toggle = gtk::CheckButton::with_label(label);
+        toggle.set_active(metric_enabled(&initial, key));
+        editor_grid.attach(&toggle, (i % 2) as i32, (i / 2) as i32, 1, 1);
+        toggles.borrow_mut().push((key, toggle));
+    }
+    root.append(&editor_grid);
+    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let save = gtk::Button::with_label("Save MangoHud settings");
+    save.add_css_class("suggested-action");
+    let reload = gtk::Button::with_label("Reload saved settings");
+    let feedback = gtk::Label::new(Some("No changes saved yet."));
+    feedback.set_wrap(true); feedback.set_xalign(0.0);
+    actions.append(&save); actions.append(&reload); root.append(&actions); root.append(&feedback);
+    {
+        let toggles = toggles.clone(); let feedback = feedback.clone();
+        save.connect_clicked(move |_| {
+            let mut content = read_config()
+                .filter(|(p, _)| !p.starts_with("/etc/"))
+                .map(|(_, c)| c).unwrap_or_default();
+            for (key, toggle) in toggles.borrow().iter() {
+                content = set_option(&content, key, toggle.is_active());
+            }
+            match save_mangohud(&content) {
+                Ok(path) => feedback.set_text(&format!("Saved: {}. Restart or reload MangoHud in the game to see changes.", path.display())),
+                Err(err) => feedback.set_text(&format!("Save failed; check permissions: {err}")),
+            }
+        });
+    }
+    {
+        let toggles = toggles.clone(); let feedback = feedback.clone();
+        reload.connect_clicked(move |_| {
+            let content = read_config().map(|(_, c)| c).unwrap_or_default();
+            for (key, toggle) in toggles.borrow().iter() { toggle.set_active(metric_enabled(&content, key)); }
+            feedback.set_text("Settings reloaded from disk; no files changed.");
+        });
+    }
     let heading = gtk::Label::new(Some("Overlay placement"));
     heading.add_css_class("title-3"); heading.set_xalign(0.0); root.append(&heading);
     let grid = gtk::Grid::new(); grid.set_column_spacing(24); grid.set_row_spacing(10);

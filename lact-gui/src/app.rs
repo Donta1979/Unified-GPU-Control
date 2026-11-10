@@ -176,7 +176,7 @@ impl AsyncComponent for AppModel {
             .default_height(CONFIG.read().window_size.map_or(DEFAULT_WINDOW_HEIGHT, |size| size.height))
             .default_width(CONFIG.read().window_size.map_or(DEFAULT_WINDOW_WIDTH, |size| size.width))
             .icon_name(APP_ID)
-            .title("LACT")
+            .title("UGC — Universal GPU Control")
             .build() {
                 #[name = "toast_overlay"]
                 adw::ToastOverlay {
@@ -193,7 +193,7 @@ impl AsyncComponent for AppModel {
 
                         #[wrap(Some)]
                         set_sidebar = &adw::NavigationPage {
-                            set_title: "LACT",
+                            set_title: "UGC — Universal GPU Control",
 
                             #[wrap(Some)]
                             #[name = "sidebar_view"]
@@ -415,8 +415,7 @@ impl AsyncComponent for AppModel {
         let displays_page = DisplaysPage::detach_default();
 
         let ui_sensitive = BoolBinding::new(false);
-        let page_navigation = PageNavigation::detach(PageNavigationInit {
-            pages: vec![
+        let mut pages = vec![
                 (
                     PageId::Info,
                     fl!(I18N, "info-page"),
@@ -438,13 +437,8 @@ impl AsyncComponent for AppModel {
                     software_page.widget().clone().upcast(),
                 ),
                 (
-                    PageId::Astral,
-                    "Astral Guard".to_owned(),
-                    make_astral_page().upcast(),
-                ),
-                (
                     PageId::MangoOsd,
-                    "MangoJuice OSD".to_owned(),
+                    "MangoHud OSD".to_owned(),
                     make_mango_osd_page().upcast(),
                 ),
                 (
@@ -452,7 +446,18 @@ impl AsyncComponent for AppModel {
                     fl!(I18N, "displays-page"),
                     displays_page.widget().clone().upcast(),
                 ),
-            ],
+            ];
+        // Specialized connector UI appears only when its actual hwmon driver is available.
+        let has_astral_sensors = std::fs::read_dir("/sys/class/hwmon")
+            .ok().into_iter().flatten().flatten().any(|entry| {
+                std::fs::read_to_string(entry.path().join("name"))
+                    .is_ok_and(|name| name.trim() == "astral12vhpwr")
+            });
+        if has_astral_sensors {
+            pages.insert(4, (PageId::Astral, "Astral Guard".to_owned(), make_astral_page().upcast()));
+        }
+        let page_navigation = PageNavigation::detach(PageNavigationInit {
+            pages,
             parent: root.clone(),
             sensitive: ui_sensitive.clone(),
         });

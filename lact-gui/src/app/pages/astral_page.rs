@@ -55,6 +55,22 @@ pub fn make_astral_page() -> gtk::Box {
     note.set_wrap(true);
     note.set_xalign(0.0);
     root.append(&note);
+    let manage = gtk::Button::with_label("Open Astral Guard Manager — Safety Settings");
+    manage.set_halign(gtk::Align::Start);
+    let manager_status = gtk::Label::new(Some("Safety settings remain in the existing independent manager."));
+    manager_status.set_xalign(0.0);
+    manager_status.set_wrap(true);
+    {
+        let manager_status = manager_status.clone();
+        manage.connect_clicked(move |_| {
+            match Command::new("astral-guard-manager").spawn() {
+                Ok(_) => manager_status.set_text("Astral Guard Manager launched."),
+                Err(err) => manager_status.set_text(&format!("Could not launch Astral Guard Manager: {err}")),
+            }
+        });
+    }
+    root.append(&manage);
+    root.append(&manager_status);
     let overall = gtk::Label::new(Some("Waiting for sensor readings…"));
     overall.set_xalign(0.0);
     root.append(&overall);
