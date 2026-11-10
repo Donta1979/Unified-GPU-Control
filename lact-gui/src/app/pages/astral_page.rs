@@ -1,4 +1,5 @@
-//! Read-only Astral connector dashboard. No privileged actions or configuration writes.
+//! Astral connector dashboard with guarded verification and safety configuration.
+//! The independent systemd emergency protection is never owned by the GUI.
 use adw::prelude::*;
 use gtk::{self, glib};
 use std::{fs, path::{Path, PathBuf}, process::Command};
@@ -51,26 +52,80 @@ pub fn make_astral_page() -> gtk::Box {
     title.add_css_class("title-2");
     title.set_xalign(0.0);
     root.append(&title);
-    let note = gtk::Label::new(Some("Read-only view. The separate Astral Guard service is responsible for protection and emergency shutdown. This page never changes its settings."));
+    let note = gtk::Label::new(Some("Live monitoring and safety management. The independent Astral Guard systemd services continue operating when UGC closes."));
     note.set_wrap(true);
     note.set_xalign(0.0);
     root.append(&note);
-    let manage = gtk::Button::with_label("Open Astral Guard Manager — Safety Settings");
-    manage.set_halign(gtk::Align::Start);
-    let manager_status = gtk::Label::new(Some("Safety settings remain in the existing independent manager."));
+
+    let safety_title = gtk::Label::new(Some("Safety management"));
+    safety_title.add_css_class("title-3");
+    safety_title.set_xalign(0.0);
+    root.append(&safety_title);
+    let safety_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let verify = gtk::Button::with_label("Run Guard Check");
+    let countdown = gtk::DropDown::from_strings(&["5 seconds", "10 seconds", "15 seconds", "20 seconds", "30 seconds"]);
+    countdown.set_selected(1);
+    let configure = gtk::Button::with_label("Apply Shutdown Countdown…");
+    safety_actions.append(&verify);
+    safety_actions.append(&countdown);
+    safety_actions.append(&configure);
+    root.append(&safety_actions);
+    let manager_status = gtk::Label::new(Some("A critical shutdown is never simulated by this page. Configuration changes require graphical administrator authorization."));
     manager_status.set_xalign(0.0);
     manager_status.set_wrap(true);
+    root.append(&manager_status);
     {
-        let manager_status = manager_status.clone();
-        manage.connect_clicked(move |_| {
-            match Command::new("astral-guard-manager").spawn() {
-                Ok(_) => manager_status.set_text("Astral Guard Manager launched."),
-                Err(err) => manager_status.set_text(&format!("Could not launch Astral Guard Manager: {err}")),
+        let result = manager_status.clone();
+        verify.connect_clicked(move |_| {
+            match Command::new("/var/usrlocal/bin/astral-guard").output() {
+                Ok(output) => {
+                    let code = output.status.code();
+                    let message = String::from_utf8_lossy(&output.stdout);
+                    let verdict = match code {
+                        Some(0) => "OK",
+                        Some(1) => "WARNING",
+                        Some(2) => "CRITICAL — inspect protection immediately",
+                        Some(3) => "UNKNOWN — protection not verified",
+                        _ => "ERROR — unexpected guard exit",
+                    };
+                    result.set_text(&format!("Guard check: {verdict}. {}", message.trim()));
+                }
+                Err(e) => result.set_text(&format!("Guard check could not run: {e}")),
             }
         });
     }
-    root.append(&manage);
-    root.append(&manager_status);
+    {
+        let result = manager_status.clone();
+        let countdown = countdown.clone();
+        configure.connect_clicked(move |_| {
+            let seconds = match countdown.selected() { 0 => "5", 1 => "10", 2 => "15", 3 => "20", 4 => "30", _ => "10" };
+            let dialog = gtk::MessageDialog::builder()
+                .modal(true)
+                .message_type(gtk::MessageType::Warning)
+                .buttons(gtk::ButtonsType::None)
+                .text("Change emergency shutdown countdown?")
+                .secondary_text(format!("Set the critical-event countdown to {seconds} seconds. The independent guard will continue running. Administrator authorization is required."))
+                .build();
+            dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+            dialog.add_button("Authorize Change", gtk::ResponseType::Accept);
+            let result = result.clone();
+            let seconds = seconds.to_string();
+            dialog.connect_response(move |dialog, response| {
+                dialog.close();
+                if response != gtk::ResponseType::Accept { return; }
+                let helper = "/usr/local/lib/astral-guard-manager/admin.py";
+                if !Path::new(helper).is_file() {
+                    result.set_text("Administrator helper missing. No changes made.");
+                    return;
+                }
+                match Command::new("pkexec").args(["/usr/bin/python3", helper, "configure", &seconds]).spawn() {
+                    Ok(_) => result.set_text("Authorization requested. Verify the countdown in the service configuration after the operation finishes; launch alone does not confirm success."),
+                    Err(e) => result.set_text(&format!("Could not request authorization: {e}. No change confirmed.")),
+                }
+            });
+            dialog.present();
+        });
+    }
     let overall = gtk::Label::new(Some("Waiting for sensor readings…"));
     overall.set_xalign(0.0);
     root.append(&overall);
