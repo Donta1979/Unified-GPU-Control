@@ -2,7 +2,7 @@
 //! The independent systemd emergency protection is never owned by the GUI.
 use adw::prelude::*;
 use gtk::{self, glib};
-use std::{fs, path::{Path, PathBuf}, process::Command};
+use std::{fs, path::{Path, PathBuf}, process::Command, sync::mpsc, thread, time::Duration};
 
 const PIN_WARN_MA: f64 = 9200.0;
 const PIN_CRIT_MA: f64 = 9500.0;
@@ -42,6 +42,39 @@ fn make_row(title: &str, grid: &gtk::Grid, idx: i32) -> gtk::Label {
     grid.attach(&result, 1, idx, 1, 1);
     result
 }
+
+// Never treat spawning pkexec as proof that a privileged operation succeeded.
+fn background_action(result: gtk::Label, title: &'static str, args: Vec<String>) {
+    result.set_text(&format!("{title}: waiting for authorization / completion…"));
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let answer = Command::new("pkexec").args(&args).output().map(|output| {
+            let details = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            (output.status.success(), details.trim().to_string())
+        });
+        let _ = tx.send(answer);
+    });
+    glib::timeout_add_local(Duration::from_millis(200), move || match rx.try_recv() {
+        Ok(Ok((true, details))) => { status(&result, &format!("{title}: {}", if details.is_empty() { "Completed" } else { &details }), "success"); glib::ControlFlow::Break }
+        Ok(Ok((false, details))) => { status(&result, &format!("{title} FAILED: {details}"), "error"); glib::ControlFlow::Break }
+        Ok(Err(e)) => { status(&result, &format!("{title} FAILED: {e}"), "error"); glib::ControlFlow::Break }
+        Err(mpsc::TryRecvError::Disconnected) => { status(&result, "Action failed: worker disconnected", "error"); glib::ControlFlow::Break }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+    });
+}
+fn confirm_action(title: &'static str, details: &str, action: impl Fn() + 'static) {
+    let dialog = gtk::MessageDialog::builder().modal(true)
+        .message_type(gtk::MessageType::Warning).buttons(gtk::ButtonsType::None)
+        .text(title).secondary_text(details).build();
+    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+    dialog.add_button("Continue", gtk::ResponseType::Accept);
+    dialog.connect_response(move |dialog, response| {
+        dialog.close();
+        if response == gtk::ResponseType::Accept { action(); }
+    });
+    dialog.present();
+}
+
 pub fn make_astral_page() -> gtk::Box {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 14);
     root.set_margin_top(20);
@@ -62,14 +95,22 @@ pub fn make_astral_page() -> gtk::Box {
     safety_title.set_xalign(0.0);
     root.append(&safety_title);
     let safety_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let refresh = gtk::Button::with_label("Refresh Status");
+    let startup = gtk::Button::with_label("Enable / Repair Startup");
     let verify = gtk::Button::with_label("Run Guard Check");
+    let reinstall = gtk::Button::with_label("Install / Reinstall");
     let countdown = gtk::DropDown::from_strings(&["5 seconds", "10 seconds", "15 seconds", "20 seconds", "30 seconds"]);
     countdown.set_selected(1);
     let configure = gtk::Button::with_label("Apply Shutdown Countdown…");
+    safety_actions.append(&refresh);
+    safety_actions.append(&startup);
     safety_actions.append(&verify);
+    safety_actions.append(&reinstall);
     safety_actions.append(&countdown);
     safety_actions.append(&configure);
     root.append(&safety_actions);
+    let siren = gtk::Button::with_label("Test Siren (no shutdown)");
+    root.append(&siren);
     let manager_status = gtk::Label::new(Some("A critical shutdown is never simulated by this page. Configuration changes require graphical administrator authorization."));
     manager_status.set_xalign(0.0);
     manager_status.set_wrap(true);
@@ -126,6 +167,48 @@ pub fn make_astral_page() -> gtk::Box {
             dialog.present();
         });
     }
+
+    {
+        let result = manager_status.clone();
+        refresh.connect_clicked(move |_| result.set_text("Refresh requested. Live pins update every 2 seconds; protection checks every 5 seconds."));
+    }
+    {
+        let result = manager_status.clone();
+        startup.connect_clicked(move |_| {
+            let result = result.clone();
+            confirm_action("Enable / Repair Startup", "This enables and starts the existing Astral services. If the guard detects a real CRITICAL condition, the independent shutdown protection may activate. Continue?", move || {
+                background_action(result, "Startup repair", vec!["/usr/bin/systemctl".into(), "enable".into(), "--now".into(), "astral-hwmon.service".into(), "astral-guard.timer".into()]);
+            });
+        });
+    }
+    {
+        let result = manager_status.clone();
+        reinstall.connect_clicked(move |_| {
+            let result = result.clone();
+            confirm_action("Install / Reinstall Protection", "Only use if protection is broken. The existing root helper rebuilds the driver and replaces safety units. Its SELinux path and rollback handling require further hardening; a working installation should not be reinstalled. Continue anyway?", move || {
+                let helper = "/usr/local/lib/astral-guard-manager/admin.py";
+                if !Path::new(helper).is_file() { status(&result, "Root repair helper missing", "error"); return; }
+                background_action(result, "Reinstall", vec!["/usr/bin/python3".into(), helper.into(), "reinstall".into()]);
+            });
+        });
+    }
+    {
+        let result = manager_status.clone();
+        siren.connect_clicked(move |_| {
+            let sound = std::env::var_os("HOME").map(PathBuf::from).map(|p| p.join(".local/share/astral-guard-manager/siren.wav"));
+            let Some(sound) = sound.filter(|p| p.is_file()) else { status(&result, "Siren file not found", "error"); return; };
+            let player = ["pw-play", "paplay", "aplay"].iter().find(|name| {
+                std::env::var_os("PATH").is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+            });
+            if let Some(player) = player {
+                match Command::new(player).arg(sound).spawn() {
+                    Ok(_) => result.set_text("Siren playback started; no shutdown requested."),
+                    Err(e) => status(&result, &format!("Siren failed: {e}"), "error"),
+                }
+            } else { status(&result, "No supported audio player found", "error"); }
+        });
+    }
+
     let overall = gtk::Label::new(Some("Waiting for sensor readings…"));
     overall.set_xalign(0.0);
     root.append(&overall);
@@ -182,12 +265,12 @@ pub fn make_astral_page() -> gtk::Box {
     let trigger = make_row("Guard failure trigger", &checks, 6);
     let critical_only = make_row("Critical-only exit configuration", &checks, 7);
     root.append(&checks);
-    let check_note = gtk::Label::new(Some("Configuration checks update every 20 seconds. ENABLED, CONFIGURED, and WIRED are not proof that emergency shutdown will work."));
+    let check_note = gtk::Label::new(Some("Configuration checks update every 5 seconds. ENABLED, CONFIGURED, and WIRED are not proof that emergency shutdown will work."));
     check_note.set_wrap(true);
     check_note.set_xalign(0.0);
     check_note.add_css_class("dim-label");
     root.append(&check_note);
-    let disclaimer = gtk::Label::new(Some("These checks do not prove that a critical-event shutdown will execute. Use the dedicated Astral Guard Manager for full protection verification."));
+    let disclaimer = gtk::Label::new(Some("These checks do not prove that a critical-event shutdown will execute. A real critical-event shutdown is not simulated here."));
     disclaimer.set_wrap(true);
     disclaimer.set_xalign(0.0);
     disclaimer.add_css_class("dim-label");
@@ -265,6 +348,6 @@ pub fn make_astral_page() -> gtk::Box {
         glib::ControlFlow::Continue
     };
     refresh_checks();
-    glib::timeout_add_seconds_local(20, refresh_checks);
+    glib::timeout_add_seconds_local(5, refresh_checks);
     root
 }
