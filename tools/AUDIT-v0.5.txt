@@ -1,0 +1,12 @@
+PASS  LACT workspace manifest present
+PASS  Astral page declared
+PASS  Astral page registered in sidebar
+PASS  Six pin cards created
+PASS  Two-second sensor polling
+PASS  Twenty-second configuration polling
+PASS  Sensor read-only
+PASS  No protection service changes
+PASS  Oneshot startup handled
+PASS  Power estimate requires all channels
+PASS  Explicitly not ASUS mileage
+PASS  No missing channel falsely OK

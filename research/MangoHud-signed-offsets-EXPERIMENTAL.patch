@@ -1,0 +1,13 @@
+--- a/src/overlay_params.cpp
++++ b/src/overlay_params.cpp
+@@ -580,8 +580,8 @@
+ #define parse_vulkan_present_mode(s) parse_str(s)
+ #define parse_vsync(s) parse_unsigned(s)
+ #define parse_gl_vsync(s) parse_signed(s)
+-#define parse_offset_x(s) parse_unsigned(s)
+-#define parse_offset_y(s) parse_unsigned(s)
++#define parse_offset_x(s) parse_signed(s)
++#define parse_offset_y(s) parse_signed(s)
+ #define parse_log_duration(s) parse_unsigned(s)
+ #define parse_time_format(s) parse_str(s)
+ #define parse_output_folder(s) parse_path(s)

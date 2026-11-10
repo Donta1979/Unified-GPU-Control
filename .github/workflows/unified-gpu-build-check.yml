@@ -1,0 +1,22 @@
+name: Unified GPU Control - Manual Build Check
+
+# Runs only when explicitly started on GitHub. Does not install anything on a PC.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up LACT Linux dependencies and Rust cache
+        uses: ./.github/actions/setup-environment
+      - name: Show compiler version
+        run: rustc --version && cargo --version
+      - name: Compile-check the unified GUI
+        run: cargo check --locked -p lact-gui

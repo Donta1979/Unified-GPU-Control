@@ -1,0 +1,64 @@
+use super::profiles::profile_rule_window::{
+    ProfileRuleWindowMsg, profile_rule_row::ProfileRuleRowMsg,
+};
+use lact_client::ConnectionStatusMsg;
+use lact_schema::{
+    DeviceStats, ProfileRule, ProfilesInfo, config::ProfileHooks, request::ProfileBase,
+};
+use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+pub enum AppMsg {
+    Error(Arc<anyhow::Error>),
+    SelectGpu(String),
+    ReloadData {
+        full: bool,
+    },
+    ReloadApiInfo,
+    Stats(Arc<DeviceStats>),
+    ProfilesPolled(Arc<ProfilesInfo>),
+    ApplyChanges,
+    RevertChanges,
+    SettingsChanged,
+    ResetClocks,
+    ResetPmfw,
+    ShowGraphsWindow,
+    ShowProcessMonitor,
+    DumpVBios,
+    DebugSnapshot,
+    ShowPreferencesDialog,
+    ExperimentalFeaturesChanged,
+    ShowAboutDialog,
+    ShowOverdriveDialog,
+    ShowServiceSetupDialog,
+    ServiceSetupDialogClosed,
+    EnableOverdrive,
+    DisableOverdrive,
+    ResetConfig,
+    ResetConfigConfirmed,
+    EnablePstateConfig,
+    EnablePstateConfigConfirmed,
+    FetchProcessList,
+    ReloadProfiles {
+        state_sender: Option<relm4::Sender<ProfileRuleRowMsg>>,
+    },
+    SelectProfile {
+        profile: Option<String>,
+        auto_switch: bool,
+    },
+    CreateProfile(String, ProfileBase),
+    DeleteProfile(String),
+    MoveProfile(String, usize),
+    RenameProfile(String, String),
+    EvaluateProfile(ProfileRule, relm4::Sender<ProfileRuleWindowMsg>),
+    SetProfileRule {
+        name: String,
+        rule: Option<ProfileRule>,
+        hooks: ProfileHooks,
+    },
+    ImportProfile,
+    ExportProfile(Option<String>),
+    ConnectionStatus(ConnectionStatusMsg),
+    Crash(String),
+    Quit,
+}

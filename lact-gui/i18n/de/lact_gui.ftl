@@ -1,0 +1,311 @@
+oc-page = Übertakten
+thermals-page = Thermik
+software-page = Software Info
+lact-gui = LACT GUI
+kernel-version = Kernelversion
+instance = Instanz
+platform-name = Plattformname
+api-version = API Version
+driver-name = Treibername
+driver-version = Treiberversion
+compute-units = Compute Units
+cl-c-version = OpenCL C Version
+local-memory = Lokaler Arbeitsspeicher
+features = Funktionalitäten
+extensions = Erweiterungen
+cache-info = Cache Informationen
+nvidia-cache-desc = { $size } L{ $level }
+monitoring-section = Überwachung
+fan-control-section = Lüfter Kontrolle
+temperatures = Temperaturen
+fan-speed = Lüfter Geschwindigkeit
+throttling = Drosselung
+auto-page = Automatisch
+curve-page = Kurve
+acoustic-limit = Akustik Limit (RPM)
+acoustic-target = Akustik Ziel (RPM)
+min-fan-speed = Minimale Lüftergeschwindigkeit (%)
+zero-rpm = Null RPM
+device-not-found = { $kind } Gerät nicht gefunden
+system-section = System
+oc-missing-fan-control-warning = Warnung: Unterstützung für Übertaktung ist deaktiviert, Lüftersteuerung ist nicht verfügbar.
+amd-cache-desc =
+    { $size } L{ $level } { $types } Cache { $shared ->
+        [1] lokal pro CU
+       *[other] mit { $shared } CUs geteilt
+    }
+hardware-info = Hardwareinformationen
+lact-daemon = LACT Daemon
+target-temp = Zieltemperatur (°C)
+global-memory = Globaler Arbeitsspeicher
+device-name = Gerätename
+show-button = Anzeigen
+cache-data = Daten
+cache-instruction = Daten
+cache-cpu = CPU
+static-page = Statisch
+version = Version
+info-page = Geräteinformationen
+zero-rpm-stop-temp = Zero RPM Stop Temperatur (°C)
+static-speed = Konstante Geschwindigkeit (%)
+reset-button = Zurücksetzen
+pmfw-reset-warning = Warnung: Die Lüfter Firmware wird hierdurch zurückgesetzt!
+reset-oc-tooltip = Warnung: Die wird alle Takteinstellungen auf Standardwerte zurücksetzen!
+amd-oc = AMD Overclocking
+amd-oc-status =
+    AMD Overclocking ist aktuell: <b>{ $status ->
+        [true] Aktiviert
+        [false] Deaktiviert
+       *[other] Unbekannt
+    }</b>
+amd-oc-detected-system-config =
+    Ermittelte Systemkonfiguration: <b>{ $config ->
+        [unsupported] Nicht unterstützt
+       *[other] { $config }
+    }</b>
+disable-amd-oc = AMD Overclocking deaktivieren
+enable-amd-oc = AMD Overclocking aktivieren
+amd-oc-updating-configuration = Aktualisieren der Konfiguration (die kann etwas dauern)
+amd-oc-updating-done = Konfiguration aktualisiert, bitte Systemneustart durchführen um die Änderungen anzuwenden.
+reset-config = Konfiguration zurücksetzen
+reset-config-description = Dies wird alle GPU Einstellungen auf ihre Standardwerte zurücksetzen und alle Profile löschen
+power-cap = Leistungsaufnahmelimit
+watt = W
+ghz = GHz
+stats-section = Statistiken
+gpu-clock = GPU Kern Takt
+vram-clock = VRAM Takt
+unknown-throttling = Unbekannt
+missing-stat = N/A
+performance-level-high = Höchster Takt
+performance-level-low = Niedrigster Takt
+performance-level-manual = Manuell
+power-profile-mode = Leistungsprofil Modus:
+manual-level-needed = Um Energiezustände und -modi nutzen zu können, muss die Leistungsstufe auf „manuell“ eingestellt werden
+overclock-section = Takt und Spannung
+nvidia-oc-info = Overclocking Informationen
+show-all-pstates = Zeige alle P-States
+enable-gpu-locked-clocks = Aktiviere GPU Takt Sperre
+pstate-list-description = <b>Die folgenden Werte zeigen den Taktraten Versatz für jeden P-State, von Höchstem zu Niedrigstem.</b>
+no-clocks-data = Keine Informationen zum Takt verfügbar
+gpu-clock-offset = GPU Takt-Offset (MHz)
+max-gpu-clock = Maximaler GPU Takt (MHz)
+max-gpu-voltage = Maximale GPU Spannung (mV)
+min-gpu-clock = Minimaler GPU Takt (MHz)
+min-vram-clock = Minimaler VRAM Takt (MHz)
+gpu-voltage-offset = GPU Spannungs-Offset (mV)
+vram-pstate-clock-offset = VRAM P-State { $pstate } Takt-Offset (MHz)
+gpu-pstate-clock = GPU P-State { $pstate } Takt (MHz)
+mem-pstate-clock = VRAM P-State { $pstate } Takt (MHz)
+gpu-pstate-clock-voltage = GPU P-State { $pstate } Spannung (mV)
+mem-pstate-clock-voltage = VRAM P-State { $pstate } Spannung (mV)
+pstates = Power States
+gpu-pstates = GPU Power States
+vram-pstates = VRAM Power States
+power-usage = Leistungsaufnahme
+performance-level-high-description = Verwende immer den höchsten Takt für GPU und VRAM.
+performance-level-low-description = Verwende immer den niedrigsten Takt für GPU und VRAM.
+performance-level-manual-description = Manuelle Leistungskontrolle.
+gpu-pstate-clock-offset = GPU P-State { $pstate } Takt-Offset (MHz)
+gpu-usage = GPU Auslastung
+min-gpu-voltage = Minimale GPU Spannung (mV)
+performance-level-auto-description = Automatische Anpassung des GPU und VRAM Takts. (Standard)
+amd-oc-disabled = AMD Overclocking ist nicht aktiv!<a href="https://github.com/ilya-zlobintsev/LACT/wiki/Overclocking-(AMD)">Einige Funktionen werden nicht verfügbar sein.</a>
+disable-amd-oc-description = Dies wird die AMD Overclocking Unterstützung (Overdrive) für den nächsten System-Neustart deaktivieren.
+amd-oc-description =
+    { $config ->
+        [rpm-ostree] Diese Option aktviert/deaktiviert die AMD Overdrive Unterstützung durch setzen von Boot-Flags mittels  <b>rpm-ostree</b>.
+        [unsupported]
+            Das System unterstützt die automatische Overdrive Funktion aktuell nicht.
+            Sie können versuchen, Overclocking manuell in LACT zu aktivieren, aber dies könnte eine manuelle Neuerstellung des initramfs erfordern, um aktiv zu werden. 
+            Falls dies nicht funktioniert, kann als Rückfalllösung der Bootparameter <b>amdgpu.ppfeaturemask=0xffffffff</b> im Bootloader hinzugefügt werden.
+       *[other] Diese Option aktiviert/deaktiviert die AMD Overdrive Unterstützung, in dem die Datei  <b>{ $path }</b> erstellt und das initramfs aktualisiert wird.
+    }
+
+    Weitere Informationen  <a href="https://github.com/ilya-zlobintsev/LACT/wiki/Overclocking-(AMD)">im Wiki</a>.
+gpu-clock-avg = GPU Kern Takt (Durchschnitt)
+max-vram-clock = Maximaler VRAM Takt (MHz)
+enable-amd-oc-description = Dies wird die Overdrive Funktionen des amdgpu Treibers aktivieren indem die Datei <b>{ $path }</b> erstellt und das initramfs aktualisiert wird. Sind Sie sicher, dass die dies tun wollen?
+gpu-clock-target = GPU Kern Takt (Ziel)
+gpu-voltage = GPU Spannung
+gpu-temp = Temperatur
+oc-warning = Änderungen an diesen Werten kann zu Instabilität des Systems führen und möglicherweise die Hardware beschädigen!
+enable-vram-locked-clocks = Aktiviere VRAM Takt Sperre
+no-throttling = Nein
+performance-level-auto = Automatisch
+add-profile = Neues Profil hinzufügen
+import-profile = Profil aus Datei importieren
+auto-switch-profiles = Automatisch umschalten
+all-rules-matched = Alle der folgenden Regeln treffen gemeinsam zu:
+any-rules-matched = Eine oder mehr der folgenden Regeln trifft zu:
+profile-activation-desc = Aktiviere Profil '{ $name }' falls:
+enable-pstate-config = Power-State Konfiguration aktivieren
+show-historical-charts = Zeige Graphen
+create-profile = Profil erstellen
+profile-copy-from = Einstellungen übernehmen von:
+create = Erstellen
+delete-profile = Profil löschen
+edit-rules = Regeln bearbeiten
+remove-rule = Regel löschen
+profile-rules = Profilregeln
+export-to-file = In Datei exportieren
+move-up = Nach oben bewegen
+profile-activation = Aktivierung
+profile-hooks = Hooks
+move-down = Nach unten bewegen
+rename-profile = Profil umbenennen
+pstates-manual-needed = Um Energiezustände ändern zu können, muss die Leistungsstufe auf „manuell“ eingestellt werden
+edit-rule = Regel bearbeiten
+rename-profile-from = Umbenennen des Profils <b>{ $old_name }</b> in:
+activation-settings-status =
+    Die ausgewählten Aktivierungseinstellungen <b>{ $matched ->
+        [true] treffen zu
+       *[false] treffen nicht zu
+    }</b>
+name = Name
+cancel = Abbrechen
+default-profile = Standard
+save = Speichern
+settings-profile = Einstellungsprofil
+profile-rule-process-name = Prozessname:
+mhz = MHz
+profile-hook-command = Einen Befehl ausführen, wenn das Profil { $cmd } ist:
+profile-hook-activated = Aktiviert:
+profile-hook-deactivated = Deaktiviert:
+profile-rule-process-tab = Ein Prozess läuft gerade
+profile-rule-gamemode-tab = Gamemode ist aktiv
+profile-rule-args-contain = Argumente enthalten:
+profile-rule-specific-process = Mit einem spezifischen Prozess:
+activation-auto-switching-disabled = Der automatische Profilwechsel ist momentan deaktiviert
+profile-hook-note = Hinweis: Diese Befehle werden als root durch den LACT Daemon ausgeführt und haben keinen Zugriff auf die Desktopumgebung. Somit können sie keine grafischen Anwendungen starten.
+nvidia-oc-description =
+    Die Übertaktungsfunktionen bei Nvidia beinhalten das Festlegen von Offsets für die GPU- und VRAM-Taktraten sowie das Einschränken des möglichen Taktbereichs durch die Funktion "gesperrte Takte".
+
+    Bei vielen Grafikkarten wirkt sich der VRAM-Takt-Offset nur zur Hälfte auf den tatsächlichen Speichertakt aus.
+    Zum Beispiel kann ein VRAM-Offset von +1000 MHz die gemessene VRAM-Takt nur um 500 MHz erhöhen.
+    Das ist normal und entspricht der Art und Weise, wie Nvidia mit GDDR-Datenraten umgeht. Passe dein Overclocking entsprechend an.
+
+    Ein sogenanntes „Pseudo-Undervolting“ ist möglich, indem man die Option „gesperrten Takte“ mit einem positiven Takt-Offset kombiniert.
+    Dies zwingt die GPU dazu, mit einer durch die gesperrten Takte begrenzten Spannung zu arbeiten, während durch den Offset eine höhere Taktrate erreicht wird.
+    Wird diese Einstellung zu aggressiv gewählt, kann sie zu Systeminstabilität führen.
+mebibyte = MiB
+reconnecting-to-daemon = Verbindung zum Dienst verloren, verbinde neu...
+daemon-connection-lost = Verbindung verloren
+plot-show-detailed-info = Genaue Informationen anzeigen
+workgroup-size = Arbeitsgruppengröße
+temperature-sensor = Temperatursensor
+vram-usage = VRAM Nutzung:
+hw-ip-info = Hardware IP Information
+hw-queues = Warteschlangen
+speed-change-threshold = Geschwindigkeitsänderung Schwellwert (°C)
+automatic-mode-threshold = Automatikmodus Schwellwert (°C)
+automatic-mode-threshold-tooltip =
+    Schalte Lüftersteuerung in Automatikmodus wenn die Temperatur unter diesem Wert ist.
+
+    Viele Nvidia GPUs unterstützen stoppen des Lüfters im Automatikmodus des Lüfters, während benutzerdefinierte Lüfterkurven einen begrenzten Drehzahlbereich wie zum Beispiel 30-100% haben.
+
+    Diese Option erlaubt das Umgehen dieser Einschränkung durch Nutzung der benutzerdefinierten Lüftungskurve nur oberhalb einer spezifischen Temperatur, während der in der Karte eingebaute Automatikmodus, der null Umdrehungen unterstützt, unterhalb dieser Temperatur genutzt wird.
+spindown-delay-tooltip = Wie lange die GPU bei einem niedrigeren Temperaturwert sein muss bevor der Lüfter gedrosselt wird
+apply-button = Anwenden
+revert-button = Rückgängig
+bytes = Bytes
+kibibyte = KiB
+gibibyte = GiB
+performance-level = Leistungsstufe
+show-process-monitor = Zeige Prozessmonitor
+generate-debug-snapshot = Erzeuge Debug Abbild
+dump-vbios = Dump VBIOS
+reset-all-config = Komplette Konfiguration zurücksetzen
+stats-update-interval = Aktualisierungsintervall (ms)
+historical-data-title = Historische Daten
+graphs-per-row = Graphen pro Reihe:
+time-period-seconds = Zeitperiode (Sekunden):
+reset-all-graphs-tooltip = Setzt alle Graphen auf Standard
+add-graph = Graph hinzufügen
+delete-graph = Graph löschen
+edit-graphs = Bearbeiten
+export-csv = Als CSV exportieren
+edit-graph-sensors = Graph Sensoren editieren
+theme = Thema
+theme-auto = Automatisch
+crash-page-title = Anwendung abgestürzt
+exit = Verlassen
+spindown-delay = Drosselungsverzögerung (ms)
+vf-curve-editor = VF Kurven Editor
+nvidia-vf-curve-warning =
+    Der Spannungs-Frequenzkurveneditor beruht auf undokumentierten Treiberfunktionalitäten.
+    Es gibt keine Garantien betreffend seines Verhaltens, Sicherheit oder Verfügbarkeit.
+    <span weight="heavy" underline="single">Benutzung auf eigene Gefahr</span>.
+voltage = Spannung
+frequency = Frequenz
+vf-active-curve = Aktive Kurve
+vf-base-curve = Basiskurve
+vf-curve-visible-range = Sichtbare Spanne (%):
+vf-curve-visible-range-to = zu
+vf-curve-flatten-right = Kurve rechts glätten
+preferences = Einstellungen
+ui = Benutzeroberfläche
+daemon = Daemon
+about = Über
+close = Schließen
+confirm = Bestätigen
+confirm-settings = Einstellungen bestätigen
+settings-confirmation = Wollen Sie die Einstellungen behalten? (Rücksetzung in { $seconds_left } Sekunden)
+error-heading = Fehler
+daemon-info-heading = Daemon Info
+version-mismatch-description =
+    Versionunterschied zwischen GUI and Daemon ({ $gui_version }-{ $gui_commit } vs { $daemon_version }-{ $daemon_commit })!
+    Wenn Sie LACT aktualisiert haben, müssen Sie den Dienst neu starten.
+menu = Menü
+displays-page = Anzeigeinformationen
+display-title = Anzeige { $identifier }
+display-manufacturer = Hersteller
+display-product-code = Produkt Code
+display-model = Modell
+display-physical-size = Physische Größe
+display-connection = Verbindung
+display-manufacture-date = Herstellungsdatum
+gui-version = GUI Version
+thresholds-section = Schwellwerte &amp; Limits
+gtt-usage = GTT Nutzung:
+power-mizer-mode-adaptive = Adaptiv
+power-mizer-mode-prefer-maximum-performance = Bevorzuge maximale Leistung
+power-mizer-mode-prefer-consistent-performance = Bevorzuge konsistente Leistung
+power-mizer-mode-auto-description = Den Treiber die Leistungsrichtlinie wählen lassen.
+power-mizer-mode-adaptive-description = GPU Takt basierend auf GPU Nutzung anpassen.
+power-mizer-mode-prefer-maximum-performance-description = Bevorzuge maximale Leistung innerhalb der Treiberlimits.
+power-mizer-mode-prefer-consistent-performance-description = Sperre auf GPU Basistakte.
+vf-curve-flatten-selection = Glätte Auswahl
+service-explanation =
+    Das Anwenden der GPU Einstellungen erfordert den LACT Systemdienst.
+    Ohne den Systemdienst läuft LACT nur im Standalone Modus, in welchem nur Informationen und Überwachung verfügbar sind.
+service-connection-status = Verbindungsstatus
+service-status = Dienststatus
+service-permission-denied =
+    Zugriff verweigert, der Dienst ist nicht konfiguriert, um Verbindungen von ihrem Benutzer zu erlauben.
+    Siehe <a href="https://github.com/ilya-zlobintsev/lact#configuration">GitHub</a> für mehr Informationen
+service-connected = verbunden
+service-disconnected = nicht verbunden
+service-version = Dienstversion
+service-version-mismatch = nicht zusammenpassend
+service-logs = Dienstprotokolle
+service-start = Starten
+service-stop = Stoppen
+service-restart = Neustarten
+displays-missing = Keine Anzeigen erkannt
+color-scheme = Farbschema
+color-scheme-auto = System
+color-scheme-light = Hell
+color-scheme-dark = Dunkel
+power-mizer-mode = PowerMizer Modus
+power-mizer-mode-auto = Auto
+gpu-voltage-boost = GPU Spannungsanhebung (%)
+gpu-voltage-boost-tooltip = Kontrolliert wie viel des Spielraums der zusätzlichen Spannung des Treibers verfügbar ist. 100% bedeutet den kompletten Spielraum, nicht 100% der kompletten GPU-Spannung. Mehr Spielraum kann höhere Taktraten stützen, aber Leistungsaufnahme und Hitze erhöhen.
+setup-error = Setup Fehler: { $error }
+no-fan-detected = Keinen Lüfter entdeckt
+no-sensors-found = Keine Sensoren gefunden
+reset-now-button = Jetzt zurücksetzen
+default-button = Standard
+service-setup-title = Diensteinrichtung
+service-autostart = Beim Hochfahren automatisch starten
+service-autostart-disable = Autostart auch deaktivieren
