@@ -81,6 +81,32 @@ fn set_option(content: &str, key: &str, enabled: bool) -> String {
     result
 }
 
+// Update a scalar option while retaining unrelated settings and comments.
+fn set_value_option(content: &str, key: &str, value: &str) -> String {
+    let mut lines: Vec<String> = content.lines().map(str::to_owned).collect();
+    let mut found = false;
+    for line in &mut lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || trimmed.starts_with(';') { continue; }
+        let option = trimmed.split_once('=').map(|(k, _)| k.trim()).unwrap_or(trimmed);
+        if option == key {
+            if !found { *line = format!("{key}={value}"); found = true; }
+            else { *line = format!("# UGC: superseded duplicate: {line}"); }
+        }
+    }
+    if !found { lines.push(format!("{key}={value}")); }
+    format!("{}\n", lines.join("\n"))
+}
+
+const POSITIONS: &[&str] = &["top-left", "top-center", "top-right", "middle-left", "middle-center", "middle-right", "bottom-left", "bottom-center", "bottom-right"];
+fn load_position(content: &str, dropdown: &gtk::DropDown, x: &gtk::SpinButton, y: &gtk::SpinButton, opacity: &gtk::SpinButton) {
+    let current = config_value(content, "position").unwrap_or("top-left");
+    dropdown.set_selected(POSITIONS.iter().position(|p| *p == current).unwrap_or(0) as u32);
+    x.set_value(config_value(content, "offset_x").and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0).clamp(0.0, 1000000.0));
+    y.set_value(config_value(content, "offset_y").and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0).clamp(0.0, 1000000.0));
+    opacity.set_value(config_value(content, "background_alpha").and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.4).clamp(0.0, 1.0));
+}
+
 fn save_mangohud(content: &str) -> Result<PathBuf, String> {
     // Never write a system-wide file. Only the current user's config is managed.
     let home = env::var("HOME").map_err(|e| e.to_string())?;
@@ -118,7 +144,7 @@ fn launch_osd_test() -> Result<&'static str, String> {
         return Err("MangoHud launcher not found in PATH. Install MangoHud to test the actual overlay.".into());
     }
     let (program, description): (&str, &str) = if available_program("vkcube") {
-        ("vkcube", "Vulkan test window (vkcube)")
+        ("vkcube", "fullscreen Vulkan test (vkcube)")
     } else if available_program("glxgears") {
         ("glxgears", "OpenGL test window (glxgears)")
     } else {
@@ -129,6 +155,7 @@ fn launch_osd_test() -> Result<&'static str, String> {
         cmd.arg("--dlsym");
     }
     cmd.arg(program);
+    if program == "vkcube" { cmd.arg("--fullscreen"); }
     // A test window must not change UGC, LACT, or MangoHud settings.
     cmd.spawn().map_err(|e| format!("Could not start MangoHud test: {e}"))?;
     Ok(description)
@@ -182,29 +209,6 @@ pub fn make_mango_osd_page() -> gtk::Box {
     feedback.set_wrap(true); feedback.set_xalign(0.0);
     actions.append(&save); actions.append(&reload); actions.append(&test_osd); root.append(&actions); root.append(&feedback);
     {
-        let toggles = toggles.clone(); let feedback = feedback.clone();
-        save.connect_clicked(move |_| {
-            let mut content = read_config()
-                .filter(|(p, _)| !p.starts_with("/etc/"))
-                .map(|(_, c)| c).unwrap_or_default();
-            for (key, toggle) in toggles.borrow().iter() {
-                content = set_option(&content, key, toggle.is_active());
-            }
-            match save_mangohud(&content) {
-                Ok(path) => feedback.set_text(&format!("Saved: {}. Restart or reload MangoHud in the game to see changes.", path.display())),
-                Err(err) => feedback.set_text(&format!("Save failed; check permissions: {err}")),
-            }
-        });
-    }
-    {
-        let toggles = toggles.clone(); let feedback = feedback.clone();
-        reload.connect_clicked(move |_| {
-            let content = read_config().map(|(_, c)| c).unwrap_or_default();
-            for (key, toggle) in toggles.borrow().iter() { toggle.set_active(metric_enabled(&content, key)); }
-            feedback.set_text("Settings reloaded from disk; no files changed.");
-        });
-    }
-    {
         let feedback = feedback.clone();
         test_osd.connect_clicked(move |_| {
             match launch_osd_test() {
@@ -238,14 +242,23 @@ pub fn make_mango_osd_page() -> gtk::Box {
     let offset_y = placement_values[2].clone();
     let alpha = placement_values[3].clone();
     root.append(&grid);
+    let placement_editor = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let position_select = gtk::DropDown::from_strings(POSITIONS);
+    placement_editor.append(&gtk::Label::new(Some("Position:")));
+    placement_editor.append(&position_select);
+    let opacity_spin = gtk::SpinButton::with_range(0.0, 1.0, 0.05);
+    opacity_spin.set_digits(2);
+    placement_editor.append(&gtk::Label::new(Some("Background opacity:")));
+    placement_editor.append(&opacity_spin);
+    root.append(&placement_editor);
     // v1.0: top-left-origin positioning sandbox, strictly preview-only.
     // Slider bounds follow a user-selected viewport size; exact coordinate entry
     // accepts values outside those bounds. Nothing is written to MangoHud.
-    let preview_title = gtk::Label::new(Some("Top-left OSD positioning (preview only)"));
+    let preview_title = gtk::Label::new(Some("OSD positioning — X/Y offsets"));
     preview_title.add_css_class("title-3");
     preview_title.set_xalign(0.0);
     root.append(&preview_title);
-    let preview_help = gtk::Label::new(Some("X=0, Y=0 starts at the upper-left. Increasing X moves right; increasing Y moves down. Exact inputs can extend the slider range beyond the viewport (up to 1,000,000 px). This is only a preview and does not change MangoHud."));
+    let preview_help = gtk::Label::new(Some("X/Y are offsets from the selected MangoHud position preset. The small diagram is illustrative; Save writes these offsets to MangoHud. Some games require restarting the overlay to pick up changes."));
     preview_help.set_wrap(true);
     preview_help.set_xalign(0.0);
     root.append(&preview_help);
@@ -382,6 +395,7 @@ pub fn make_mango_osd_page() -> gtk::Box {
         let y_spin = y_spin.clone();
         let width_spin = width_spin.clone();
         let height_spin = height_spin.clone();
+        let position_select = position_select.clone();
         move |_, cr, w, h| {
             let w = w as f64;
             let h = h as f64;
@@ -415,8 +429,13 @@ pub fn make_mango_osd_page() -> gtk::Box {
             let _ = cr.save();
             cr.rectangle(origin_x, origin_y, screen_w, screen_h);
             cr.clip();
-            let px = origin_x + x_spin.value() * scale;
-            let py = origin_y + y_spin.value() * scale;
+            let preset = POSITIONS.get(position_select.selected() as usize).copied().unwrap_or("top-left");
+            let anchor_x = if preset.ends_with("right") { (screen_w - 92.0).max(0.0) }
+                else if preset.ends_with("center") { (screen_w - 92.0).max(0.0) / 2.0 } else { 0.0 };
+            let anchor_y = if preset.starts_with("bottom") { (screen_h - 34.0).max(0.0) }
+                else if preset.starts_with("middle") { (screen_h - 34.0).max(0.0) / 2.0 } else { 0.0 };
+            let px = origin_x + anchor_x + x_spin.value() * scale;
+            let py = origin_y + anchor_y + y_spin.value() * scale;
             cr.set_source_rgb(0.20, 0.68, 0.49);
             cr.rectangle(px, py, 92.0, 34.0);
             let _ = cr.fill();
@@ -426,6 +445,10 @@ pub fn make_mango_osd_page() -> gtk::Box {
             let _ = cr.restore();
         }
     });
+    {
+        let canvas = canvas.clone();
+        position_select.connect_selected_notify(move |_| canvas.queue_draw());
+    }
     frame.set_child(Some(&canvas));
     let preview_expander = gtk::Expander::new(Some("Viewport preview (show / hide)"));
     preview_expander.set_expanded(true);
@@ -478,13 +501,51 @@ pub fn make_mango_osd_page() -> gtk::Box {
             canvas.queue_draw();
         });
     }
-    let reset = gtk::Button::with_label("Upper-left (X=0, Y=0)");
+    let reset = gtk::Button::with_label("Reset offsets (X=0, Y=0)");
     {
         let x_spin = x_spin.clone();
         let y_spin = y_spin.clone();
         reset.connect_clicked(move |_| { x_spin.set_value(0.0); y_spin.set_value(0.0); });
     }
     root.append(&reset);
+
+    // Load editable placement once. Periodic status refresh never discards unsaved edits.
+    load_position(&initial, &position_select, &x_spin, &y_spin, &opacity_spin);
+    {
+        let toggles = toggles.clone(); let feedback = feedback.clone();
+        let position_select = position_select.clone();
+        let x_spin = x_spin.clone(); let y_spin = y_spin.clone();
+        let opacity_spin = opacity_spin.clone();
+        save.connect_clicked(move |_| {
+            let mut content = read_config()
+                .filter(|(p, _)| !p.starts_with("/etc/"))
+                .map(|(_, c)| c).unwrap_or_default();
+            for (key, toggle) in toggles.borrow().iter() {
+                content = set_option(&content, key, toggle.is_active());
+            }
+            let selected = POSITIONS.get(position_select.selected() as usize).copied().unwrap_or("top-left");
+            content = set_value_option(&content, "position", selected);
+            content = set_value_option(&content, "offset_x", &format!("{}", x_spin.value() as i64));
+            content = set_value_option(&content, "offset_y", &format!("{}", y_spin.value() as i64));
+            content = set_value_option(&content, "background_alpha", &format!("{:.2}", opacity_spin.value()));
+            match save_mangohud(&content) {
+                Ok(path) => feedback.set_text(&format!("Saved: {}. Restart or reload MangoHud in the game to see changes.", path.display())),
+                Err(err) => feedback.set_text(&format!("Save failed; check permissions: {err}")),
+            }
+        });
+    }
+    {
+        let toggles = toggles.clone(); let feedback = feedback.clone();
+        let position_select = position_select.clone();
+        let x_spin = x_spin.clone(); let y_spin = y_spin.clone();
+        let opacity_spin = opacity_spin.clone();
+        reload.connect_clicked(move |_| {
+            let content = read_config().map(|(_, c)| c).unwrap_or_default();
+            for (key, toggle) in toggles.borrow().iter() { toggle.set_active(metric_enabled(&content, key)); }
+            load_position(&content, &position_select, &x_spin, &y_spin, &opacity_spin);
+            feedback.set_text("Settings reloaded from disk; no files changed.");
+        });
+    }
 
     let metrics_title = gtk::Label::new(Some("Metrics"));
     metrics_title.add_css_class("title-3"); metrics_title.set_xalign(0.0); root.append(&metrics_title);
@@ -508,7 +569,7 @@ pub fn make_mango_osd_page() -> gtk::Box {
         labels.push(status);
     }
     root.append(&metrics);
-    let caveat = gtk::Label::new(Some("This preview reads only the first accessible global configuration file. MangoHud can also use per-game configs, environment overrides, and Flatpak-specific settings. The editor is preview-only. Actual MangoHud placement is constrained by its renderer and must be investigated before enabling Apply."));
+    let caveat = gtk::Label::new(Some("This preview reads only the first accessible global configuration file. MangoHud can also use per-game configs, environment overrides, and Flatpak-specific settings. Save writes the selected position, offsets and opacity to the global MangoHud configuration. The viewport diagram is illustrative, not an exact renderer. Per-game overrides may take precedence."));
     caveat.set_xalign(0.0); caveat.set_wrap(true); caveat.add_css_class("dim-label"); root.append(&caveat);
     let refresh = move || {
         if let Some((path, content)) = read_config() {
