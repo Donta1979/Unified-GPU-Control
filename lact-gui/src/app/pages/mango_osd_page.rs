@@ -1,7 +1,7 @@
 //! MangoHud settings editor. Writes only user-owned configuration after explicit Apply.
 use adw::prelude::*;
 use gtk::{self, glib};
-use std::{env, fs, path::{Path, PathBuf}, rc::Rc, cell::RefCell};
+use std::{env, fs, path::{Path, PathBuf}, rc::Rc, cell::RefCell, process::Command};
 
 fn config_candidates() -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -103,6 +103,37 @@ fn save_mangohud(content: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+// Locate optional external test utilities without invoking a shell.
+fn available_program(name: &str) -> bool {
+    env::var_os("PATH").map(|paths| {
+        env::split_paths(&paths).any(|dir| {
+            let candidate = dir.join(name);
+            candidate.is_file() && !candidate.is_symlink()
+        })
+    }).unwrap_or(false)
+}
+
+fn launch_osd_test() -> Result<&'static str, String> {
+    if !available_program("mangohud") {
+        return Err("MangoHud launcher not found in PATH. Install MangoHud to test the actual overlay.".into());
+    }
+    let (program, description): (&str, &str) = if available_program("vkcube") {
+        ("vkcube", "Vulkan test window (vkcube)")
+    } else if available_program("glxgears") {
+        ("glxgears", "OpenGL test window (glxgears)")
+    } else {
+        return Err("No graphics test program found. Install vkcube (recommended) or glxgears to use Test OSD.".into());
+    };
+    let mut cmd = Command::new("mangohud");
+    if program == "glxgears" {
+        cmd.arg("--dlsym");
+    }
+    cmd.arg(program);
+    // A test window must not change UGC, LACT, or MangoHud settings.
+    cmd.spawn().map_err(|e| format!("Could not start MangoHud test: {e}"))?;
+    Ok(description)
+}
+
 pub fn make_mango_osd_page() -> gtk::Box {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 14);
     root.set_margin_top(20);
@@ -145,9 +176,11 @@ pub fn make_mango_osd_page() -> gtk::Box {
     let save = gtk::Button::with_label("Save MangoHud settings");
     save.add_css_class("suggested-action");
     let reload = gtk::Button::with_label("Reload saved settings");
+    let test_osd = gtk::Button::with_label("▶ Test OSD");
+    test_osd.set_tooltip_text(Some("Launch a real MangoHud test window using your saved configuration"));
     let feedback = gtk::Label::new(Some("No changes saved yet."));
     feedback.set_wrap(true); feedback.set_xalign(0.0);
-    actions.append(&save); actions.append(&reload); root.append(&actions); root.append(&feedback);
+    actions.append(&save); actions.append(&reload); actions.append(&test_osd); root.append(&actions); root.append(&feedback);
     {
         let toggles = toggles.clone(); let feedback = feedback.clone();
         save.connect_clicked(move |_| {
@@ -169,6 +202,15 @@ pub fn make_mango_osd_page() -> gtk::Box {
             let content = read_config().map(|(_, c)| c).unwrap_or_default();
             for (key, toggle) in toggles.borrow().iter() { toggle.set_active(metric_enabled(&content, key)); }
             feedback.set_text("Settings reloaded from disk; no files changed.");
+        });
+    }
+    {
+        let feedback = feedback.clone();
+        test_osd.connect_clicked(move |_| {
+            match launch_osd_test() {
+                Ok(description) => feedback.set_text(&format!("Started {description} with MangoHud. Close the test window when finished. Uses saved settings; unsaved edits are not included.")),
+                Err(err) => feedback.set_text(&format!("Test OSD unavailable: {err}")),
+            }
         });
     }
     let heading = gtk::Label::new(Some("Overlay placement"));
