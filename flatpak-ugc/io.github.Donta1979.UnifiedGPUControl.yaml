@@ -3,8 +3,8 @@ runtime: org.gnome.Platform
 runtime-version: '51'
 sdk: org.gnome.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.rust-stable
-  - org.freedesktop.Sdk.Extension.llvm22
+  - org.freedesktop.Sdk.Extension.rust-stable//25.08
+  - org.freedesktop.Sdk.Extension.llvm22//25.08
 command: startup.sh
 finish-args:
   - --share=ipc
