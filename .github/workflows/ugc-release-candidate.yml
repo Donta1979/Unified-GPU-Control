@@ -28,8 +28,8 @@ jobs:
       - name: Install build runtimes
         run: |
           flatpak install --user -y flathub org.gnome.Platform//51 org.gnome.Sdk//51
-          flatpak install --user -y flathub org.freedesktop.Sdk.Extension.rust-stable//25.08
-          flatpak install --user -y flathub org.freedesktop.Sdk.Extension.llvm22//25.08
+          flatpak install --user -y flathub org.freedesktop.Sdk.Extension.rust-stable//26.08
+          flatpak install --user -y flathub org.freedesktop.Sdk.Extension.llvm22//26.08
 
       - name: Build Flatpak
         run: |
