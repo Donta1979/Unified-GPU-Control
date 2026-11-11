@@ -144,6 +144,7 @@ modules:
       env:
         CARGO_HOME: /run/build/lact/cargo
         PREFIX: /app
+        PKG_CONFIG_PATH: /app/lib64/pkgconfig:/app/lib/pkgconfig:/app/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig
     build-commands:
       - cargo --offline fetch --manifest-path Cargo.toml
       - cargo --offline build -p lact --release
