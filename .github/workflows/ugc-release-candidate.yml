@@ -1,0 +1,68 @@
+name: UGC Release Candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-flatpak:
+    name: Build UGC Flatpak
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Configure Flathub
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Install build runtimes
+        run: |
+          flatpak install --user -y flathub org.gnome.Platform//51 org.gnome.Sdk//51
+          flatpak install --user -y flathub org.freedesktop.Sdk.Extension.rust-stable//25.08
+          flatpak install --user -y flathub org.freedesktop.Sdk.Extension.llvm22//25.08
+
+      - name: Build Flatpak
+        run: |
+          flatpak-builder --disable-tests \
+            --repo=ugc-repo \
+            ugc-build \
+            flatpak-ugc/io.github.Donta1979.UnifiedGPUControl.yaml
+
+      - name: Create Flatpak bundle
+        run: |
+          mkdir -p dist
+          flatpak build-bundle \
+            ugc-repo \
+            dist/Unified-GPU-Control-v1.8-x86_64.flatpak \
+            io.github.Donta1979.UnifiedGPUControl
+
+      - name: Package installer and documentation
+        run: |
+          mkdir -p dist/release
+          cp installer/install.sh dist/release/install.sh
+          cp dist/Unified-GPU-Control-v1.8-x86_64.flatpak dist/release/
+          cp README.md dist/release/README.md
+          cp LICENSE dist/release/LICENSE
+          chmod +x dist/release/install.sh
+          tar -czf dist/Unified-GPU-Control-v1.8-Linux-x86_64.tar.gz \
+            -C dist/release .
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unified-GPU-Control-v1.8-Linux-x86_64
+          path: |
+            dist/Unified-GPU-Control-v1.8-Linux-x86_64.tar.gz
+            dist/Unified-GPU-Control-v1.8-x86_64.flatpak
+          if-no-files-found: error
+          retention-days: 30
