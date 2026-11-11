@@ -1,0 +1,6 @@
+[Unit]
+Description=Unified GPU Control Astral Guard status snapshot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/libexec/ugc-astral-status-publisher

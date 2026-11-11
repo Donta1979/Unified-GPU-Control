@@ -50,6 +50,10 @@ jobs:
         run: |
           mkdir -p dist/release
           cp installer/install.sh dist/release/install.sh
+          mkdir -p dist/release/host-helper/systemd
+          cp flatpak-ugc/host-helper/astral-status-publisher.py dist/release/host-helper/
+          cp flatpak-ugc/host-helper/systemd/ugc-astral-status.service dist/release/host-helper/systemd/
+          cp flatpak-ugc/host-helper/systemd/ugc-astral-status.timer dist/release/host-helper/systemd/
           cp dist/Unified-GPU-Control-v1.8-x86_64.flatpak dist/release/
           cp README.md dist/release/README.md
           cp LICENSE dist/release/LICENSE

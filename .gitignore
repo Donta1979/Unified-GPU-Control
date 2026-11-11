@@ -10,3 +10,7 @@ build/
 .flatpak-builder/
 .vscode
 .idea
+
+# UGC development backups
+*.backup*
+*.before-*

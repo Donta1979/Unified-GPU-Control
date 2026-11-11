@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Unified GPU Control Astral status
+
+[Timer]
+OnBootSec=10s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=ugc-astral-status.service
+
+[Install]
+WantedBy=timers.target

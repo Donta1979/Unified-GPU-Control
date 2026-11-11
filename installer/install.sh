@@ -129,6 +129,39 @@ else
 fi
 
 echo
+echo "===== UGC Astral status integration ====="
+
+HELPER_DIR="$SCRIPT_DIR/host-helper"
+
+if [[ -f "$HELPER_DIR/astral-status-publisher.py" ]] &&
+   [[ -f "$HELPER_DIR/systemd/ugc-astral-status.service" ]] &&
+   [[ -f "$HELPER_DIR/systemd/ugc-astral-status.timer" ]]; then
+
+    mkdir -p "$HOME/.local/libexec" "$HOME/.config/systemd/user"
+
+    install -m 755 \
+        "$HELPER_DIR/astral-status-publisher.py" \
+        "$HOME/.local/libexec/ugc-astral-status-publisher"
+
+    install -m 644 \
+        "$HELPER_DIR/systemd/ugc-astral-status.service" \
+        "$HOME/.config/systemd/user/ugc-astral-status.service"
+
+    install -m 644 \
+        "$HELPER_DIR/systemd/ugc-astral-status.timer" \
+        "$HOME/.config/systemd/user/ugc-astral-status.timer"
+
+    systemctl --user daemon-reload
+    systemctl --user enable --now ugc-astral-status.timer
+    systemctl --user start ugc-astral-status.service
+
+    echo "OK: UGC Astral status publisher installed."
+else
+    echo "NOTICE: UGC Astral status publisher not configured."
+    echo "The existing Astral Guard Manager and packaged helper files are required."
+fi
+
+echo
 echo "[5/5] Final verification"
 
 if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
