@@ -99,6 +99,7 @@ jobs:
             -C dist/release .
 
       - name: Attest release artifacts
+        if: github.event.repository.private == false
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
