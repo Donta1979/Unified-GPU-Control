@@ -1,15 +1,14 @@
 use gtk::{glib, prelude::*};
 
-const APP_PNG: &[u8] =
-    include_bytes!("../../../../res/io.github.Donta1979.UnifiedGPUControl.png");
+const APP_PNG: &[u8] = include_bytes!("../../../../res/io.github.Donta1979.UnifiedGPUControl.png");
 
 const SIZE: i32 = 192;
 
 pub(crate) fn new() -> gtk::Picture {
     let bytes = glib::Bytes::from_static(APP_PNG);
 
-    let texture = gtk::gdk::Texture::from_bytes(&bytes)
-        .expect("UGC loading icon should be loadable");
+    let texture =
+        gtk::gdk::Texture::from_bytes(&bytes).expect("UGC loading icon should be loadable");
 
     let picture = gtk::Picture::new();
 

@@ -8,4 +8,5 @@ set -e
 # Include libraries installed under /app/lib64 by Flatpak modules.
 export LD_LIBRARY_PATH="/app/lib64:/app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+export ADW_DEBUG_COLOR_SCHEME=prefer-dark
 exec /app/bin/ugc gui "$@"

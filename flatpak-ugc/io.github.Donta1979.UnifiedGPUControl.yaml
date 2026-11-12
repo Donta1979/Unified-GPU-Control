@@ -12,6 +12,8 @@ finish-args:
   - --socket=wayland
   - --device=dri
   - --filesystem=/run/lactd.sock
+  - --filesystem=xdg-config/MangoHud:rw
+  - --talk-name=org.freedesktop.Flatpak
 cleanup:
   - /include
   - /share/vulkan/registry

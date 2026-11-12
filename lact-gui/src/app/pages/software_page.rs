@@ -1,7 +1,7 @@
 mod vulkan;
 
 use crate::{
-    GUI_VERSION, I18N, REPO_URL,
+    GUI_VERSION, I18N, REPO_URL, UGC_VERSION,
     app::{
         components::{
             info_row::{InfoRow, InfoRowExt},
@@ -61,7 +61,7 @@ impl relm4::SimpleComponent for SoftwarePage {
                     set_selection_mode: gtk::SelectionMode::None,
 
                     append_child = &InfoRow::new_selectable(&fl!(I18N, "lact-daemon"), &daemon_version),
-                    append_child = &InfoRow::new_selectable(&fl!(I18N, "lact-gui"), &gui_version),
+                    append_child = &InfoRow::new_selectable("Unified GPU Control", &gui_version),
                     append_child = &InfoRow::new_selectable(&fl!(I18N, "kernel-version"), &system_info.kernel_version),
                 },
             },
@@ -296,7 +296,7 @@ impl relm4::SimpleComponent for SoftwarePage {
         };
         let gui_commit_link = format!("{REPO_URL}/commit/{GIT_COMMIT}");
         let gui_version = format!(
-            "{GUI_VERSION}-{gui_profile} (commit <a href=\"{gui_commit_link}\">{GIT_COMMIT}</a>)"
+            "{UGC_VERSION} (LACT {GUI_VERSION}-{gui_profile}, commit <a href=\"{gui_commit_link}\">{GIT_COMMIT}</a>)"
         );
 
         let loader_picture = loader::new();

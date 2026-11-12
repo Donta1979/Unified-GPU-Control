@@ -1,8 +1,8 @@
 pub mod astral_page;
-pub mod mango_osd_page;
 pub mod crash_page;
 pub mod displays_page;
 pub mod info_page;
+pub mod mango_osd_page;
 pub mod oc_page;
 pub mod software_page;
 pub mod thermals_page;

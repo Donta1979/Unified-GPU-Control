@@ -9,9 +9,9 @@ mod overdrive_dialog;
 mod page_navigation;
 pub(crate) mod pages;
 mod preferences_dialog;
-mod settings_backup;
 mod process_monitor;
 mod profiles;
+mod settings_backup;
 pub(crate) mod utils;
 
 use crate::{
@@ -56,9 +56,9 @@ use page_navigation::{PageNavigation, PageNavigationInit, PageNavigationMsg};
 use pages::{
     PageId, PageUpdate,
     astral_page::make_astral_page,
-    mango_osd_page::make_mango_osd_page,
     crash_page::CrashPage,
     info_page::InformationPage,
+    mango_osd_page::make_mango_osd_page,
     oc_page::{OcPage, OcPageMsg},
     software_page::{SoftwarePage, SoftwarePageMsg},
     thermals_page::{ThermalsPage, ThermalsPageMsg},
@@ -250,6 +250,7 @@ impl AsyncComponent for AppModel {
                         #[wrap(Some)]
                         #[name = "content_page"]
                         set_content = &adw::NavigationPage {
+                            set_title: "UGC",
 
                             #[wrap(Some)]
                             set_child = &adw::ToolbarView {
@@ -419,45 +420,56 @@ impl AsyncComponent for AppModel {
 
         let ui_sensitive = BoolBinding::new(false);
         let mut pages = vec![
-                (
-                    PageId::Info,
-                    fl!(I18N, "info-page"),
-                    info_page.widget().clone().upcast(),
-                ),
-                (
-                    PageId::Oc,
-                    fl!(I18N, "oc-page"),
-                    oc_page.widget().clone().upcast(),
-                ),
-                (
-                    PageId::Thermals,
-                    fl!(I18N, "thermals-page"),
-                    thermals_page.widget().clone().upcast(),
-                ),
-                (
-                    PageId::Software,
-                    fl!(I18N, "software-page"),
-                    software_page.widget().clone().upcast(),
-                ),
-                (
-                    PageId::MangoOsd,
-                    "MangoHud OSD".to_owned(),
-                    make_mango_osd_page().upcast(),
-                ),
-                (
-                    PageId::Displays,
-                    fl!(I18N, "displays-page"),
-                    displays_page.widget().clone().upcast(),
-                ),
-            ];
+            (
+                PageId::Info,
+                fl!(I18N, "info-page"),
+                info_page.widget().clone().upcast(),
+            ),
+            (
+                PageId::Oc,
+                fl!(I18N, "oc-page"),
+                oc_page.widget().clone().upcast(),
+            ),
+            (
+                PageId::Thermals,
+                fl!(I18N, "thermals-page"),
+                thermals_page.widget().clone().upcast(),
+            ),
+            (
+                PageId::Software,
+                fl!(I18N, "software-page"),
+                software_page.widget().clone().upcast(),
+            ),
+            (
+                PageId::MangoOsd,
+                "MangoHud OSD".to_owned(),
+                make_mango_osd_page().upcast(),
+            ),
+            (
+                PageId::Displays,
+                fl!(I18N, "displays-page"),
+                displays_page.widget().clone().upcast(),
+            ),
+        ];
         // Specialized connector UI appears only when its actual hwmon driver is available.
         let has_astral_sensors = std::fs::read_dir("/sys/class/hwmon")
-            .ok().into_iter().flatten().flatten().any(|entry| {
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|entry| {
                 std::fs::read_to_string(entry.path().join("name"))
                     .is_ok_and(|name| name.trim() == "astral12vhpwr")
             });
         if has_astral_sensors {
-            pages.insert(4, (PageId::Astral, "Astral Guard".to_owned(), make_astral_page().upcast()));
+            pages.insert(
+                4,
+                (
+                    PageId::Astral,
+                    "Astral Guard".to_owned(),
+                    make_astral_page().upcast(),
+                ),
+            );
         }
         let page_navigation = PageNavigation::detach(PageNavigationInit {
             pages,
@@ -677,18 +689,44 @@ impl AppModel {
             }
             AppMsg::ReloadApiInfo => {
                 let gpu_id = Self::get_selected_gpu_id()?;
-                match self.daemon_client.get_device_api_info(&gpu_id).await {
-                    Ok(api_info) => {
-                        self.software_page
-                            .emit(SoftwarePageMsg::DeviceApiInfo(Some(api_info)));
-                    }
+                let mut api_info = match self.daemon_client.get_device_api_info(&gpu_id).await {
+                    Ok(info) => info,
                     Err(err) => {
                         error!("could not fetch API info: {err:#}");
-                        self.software_page.emit(SoftwarePageMsg::DeviceApiInfo(Some(
-                            DeviceApiInfo::default(),
-                        )));
+                        DeviceApiInfo::default()
+                    }
+                };
+
+                if api_info.vulkan_instances.is_empty() || api_info.opencl_instances.is_empty() {
+                    if let Ok(device) = self
+                        .daemon_client
+                        .get_device_info(&gpu_id, Some(false))
+                        .await
+                    {
+                        if let Some(pci_info) = device.pci_info {
+                            match lact_daemon::detect_local_api_info(
+                                &gpu_id,
+                                pci_info,
+                                device.driver,
+                            ) {
+                                Ok(local) => {
+                                    if api_info.vulkan_instances.is_empty() {
+                                        api_info.vulkan_instances = local.vulkan_instances;
+                                    }
+                                    if api_info.opencl_instances.is_empty() {
+                                        api_info.opencl_instances = local.opencl_instances;
+                                    }
+                                }
+                                Err(err) => {
+                                    error!("Local API detection failed: {err:#}");
+                                }
+                            }
+                        }
                     }
                 }
+
+                self.software_page
+                    .emit(SoftwarePageMsg::DeviceApiInfo(Some(api_info)));
             }
             AppMsg::ShowPreferencesDialog => {
                 self.preferences_dialog.emit(PreferencesDialogMsg::Show);
@@ -705,9 +743,7 @@ impl AppModel {
                 let stream = dialog.into_stream();
 
                 sender.oneshot_command(async move {
-                    if let Some(OpenDialogResponse::Accept(path)) =
-                        stream.recv_one().await
-                    {
+                    if let Some(OpenDialogResponse::Accept(path)) = stream.recv_one().await {
                         Some(CommandOutput::SettingsImportSelected(path))
                     } else {
                         None
@@ -715,8 +751,7 @@ impl AppModel {
                 });
             }
             AppMsg::ExportSettings => {
-                let backup =
-                    settings_backup::collect_backup(&self.daemon_client).await?;
+                let backup = settings_backup::collect_backup(&self.daemon_client).await?;
 
                 let settings = SaveDialogSettings {
                     create_folders: true,
@@ -732,15 +767,12 @@ impl AppModel {
                 let stream = dialog.into_stream();
 
                 sender.oneshot_command(async move {
-                    if let Some(SaveDialogResponse::Accept(path)) =
-                        stream.recv_one().await
-                    {
+                    if let Some(SaveDialogResponse::Accept(path)) = stream.recv_one().await {
                         let result = (|| -> anyhow::Result<()> {
                             let contents = serde_json::to_string_pretty(&backup)
                                 .context("Could not serialize settings backup")?;
 
-                            fs::write(&path, contents)
-                                .context("Could not export UGC settings")?;
+                            fs::write(&path, contents).context("Could not export UGC settings")?;
 
                             Ok(())
                         })();
@@ -1047,12 +1079,11 @@ impl AppModel {
     ) -> anyhow::Result<()> {
         match msg {
             CommandOutput::SettingsImportSelected(path) => {
-                let contents = fs::read_to_string(&path)
-                    .context("Could not read UGC settings backup")?;
+                let contents =
+                    fs::read_to_string(&path).context("Could not read UGC settings backup")?;
 
-                let backup =
-                    serde_json::from_str::<settings_backup::SettingsBackup>(&contents)
-                        .context("Could not parse UGC settings backup")?;
+                let backup = serde_json::from_str::<settings_backup::SettingsBackup>(&contents)
+                    .context("Could not parse UGC settings backup")?;
 
                 backup.validate()?;
 
@@ -1064,26 +1095,20 @@ impl AppModel {
                 let dialog = adw::AlertDialog::builder()
                     .heading("Import UGC Settings?")
                     .body(format!(
-                        "This backup contains {} named GPU profiles.\n\n\
+                        "This backup contains {} GPU profiles, including the default profile if present.\n\n\
                          Imported profiles will receive new names. Existing profiles, \
                          the default profile, and active GPU settings will not be replaced.\n\n\
                          Automatic switching rules and hooks will be disabled on imported profiles.\n\n\
                          GUI preferences will be restored. Restart UGC afterward to apply all interface changes.",
-                        backup.profiles.len()
+                        backup.profile_count()
                     ))
                     .default_response("cancel")
                     .close_response("cancel")
                     .build();
 
-                dialog.add_responses(&[
-                    ("cancel", "Cancel"),
-                    ("import", "Import Settings"),
-                ]);
+                dialog.add_responses(&[("cancel", "Cancel"), ("import", "Import Settings")]);
 
-                dialog.set_response_appearance(
-                    "import",
-                    adw::ResponseAppearance::Suggested,
-                );
+                dialog.set_response_appearance("import", adw::ResponseAppearance::Suggested);
 
                 let window = self.application.active_window();
 
@@ -1092,19 +1117,16 @@ impl AppModel {
 
                     if response == "import" {
                         let restored =
-                            settings_backup::restore_profiles_safely(
-                                &self.daemon_client,
-                                &backup,
-                            )
-                            .await?;
+                            settings_backup::restore_profiles_safely(&self.daemon_client, &backup)
+                                .await?;
 
                         settings_backup::restore_ui_preferences(&backup)?;
 
-                        info!("Restored GUI preferences and {restored} GPU profiles from UGC backup");
+                        info!(
+                            "Restored GUI preferences and {restored} GPU profiles from UGC backup"
+                        );
 
-                        sender.input(AppMsg::ReloadProfiles {
-                            state_sender: None,
-                        });
+                        sender.input(AppMsg::ReloadProfiles { state_sender: None });
                     }
                 }
             }

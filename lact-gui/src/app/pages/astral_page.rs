@@ -16,6 +16,175 @@ const PIN_CRIT_MA: f64 = 9500.0;
 const VOLT_WARN_MV: f64 = 11400.0;
 const VOLT_CRIT_MV: f64 = 11000.0;
 
+// Run Astral operations on the host when packaged as Flatpak.
+// Administrative changes still require host polkit authorization.
+fn host_command(program: &str, args: &[&str]) -> Command {
+    if std::env::var_os("FLATPAK_ID").is_some() {
+        let mut command = Command::new("flatpak-spawn");
+        command.arg("--host").arg(program).args(args);
+        command
+    } else {
+        let mut command = Command::new(program);
+        command.args(args);
+        command
+    }
+}
+
+// Testing45: read-only recovery triage. This never runs the guard or changes services.
+fn recovery_triage() -> Result<(&'static str, String), String> {
+    let module = "/var/usrlocal/lib/astral-hwmon/astral-hwmon.ko";
+    let guard = "/var/usrlocal/bin/astral-guard";
+    let paths = [
+        module, guard,
+        "/etc/systemd/system/astral-hwmon.service",
+        "/etc/systemd/system/astral-guard.service",
+        "/etc/systemd/system/astral-guard.timer",
+        "/etc/systemd/system/astral-guard-poweroff.service",
+    ];
+    let present = paths.iter().filter(|path| host_file_exists(path)).count();
+    let loaded = host_command("/usr/bin/test", &["-d", "/sys/module/astral_hwmon"])
+        .status().map_err(|e| format!("Cannot inspect kernel module: {e}"))?.success();
+    if present == 0 && !loaded {
+        return Ok(("warning", "Astral Guard not installed. Automatic installation is disabled pending isolated testing.".into()));
+    }
+    if present != paths.len() {
+        return Ok(("error", format!("Partial installation: {present}/{} required files found; module loaded={loaded}. Manual diagnosis required.", paths.len())));
+    }
+    let uname = host_command("/usr/bin/uname", &["-r"])
+        .output().map_err(|e| format!("Kernel query failed: {e}"))?;
+    let modinfo = host_command("/usr/sbin/modinfo", &["-F", "vermagic", module])
+        .output().map_err(|e| format!("Driver metadata query failed: {e}"))?;
+    if !uname.status.success() || !modinfo.status.success() {
+        return Err("Kernel or module metadata unavailable; no repair attempted".into());
+    }
+    let kernel = String::from_utf8_lossy(&uname.stdout).trim().to_string();
+    let magic = String::from_utf8_lossy(&modinfo.stdout);
+    if magic.split_whitespace().next() != Some(kernel.as_str()) {
+        return Ok(("error", "Kernel mismatch. Automatic driver replacement blocked.".into()));
+    }
+    let check = |op: &str, unit: &str| -> Result<bool, String> {
+        let output = host_command("/usr/bin/systemctl", &[op, unit])
+            .output().map_err(|e| format!("{unit}: {e}"))?;
+        Ok(output.status.success() && String::from_utf8_lossy(&output.stdout).trim() ==
+            (if op == "is-active" { "active" } else { "enabled" }))
+    };
+    let ready = loaded
+        && check("is-active", "astral-hwmon.service")?
+        && check("is-active", "astral-guard.timer")?
+        && check("is-enabled", "astral-guard.timer")?;
+    if ready {
+        Ok(("success", "Driver loaded, kernel matches, and monitoring services report active/enabled. Emergency shutdown was NOT tested.".into()))
+    } else {
+        Ok(("error", "Protection is not fully operational. Automatic reinstall blocked; inspect service status before any repair.".into()))
+    }
+}
+
+// Testing59: read-only installation preflight. A fresh candidate is NOT authorization
+// to install; the privileged host installer must independently recheck everything.
+fn installation_preflight() -> Result<(&'static str, String), String> {
+    let files = [
+        "/var/usrlocal/lib/astral-hwmon/astral-hwmon.ko",
+        "/var/usrlocal/bin/astral-guard",
+        "/etc/systemd/system/astral-hwmon.service",
+        "/etc/systemd/system/astral-guard.service",
+        "/etc/systemd/system/astral-guard.timer",
+        "/etc/systemd/system/astral-guard-poweroff.service",
+        "/var/usrlocal/lib/astral-guard-manager/admin.py",
+    ];
+    let mut found = 0;
+    for file in files {
+        let output = host_command("/usr/bin/test", &["-e", file])
+            .status().map_err(|e| format!("Cannot inspect {file}: {e}"))?;
+        if output.success() { found += 1; }
+    }
+    let loaded = host_command("/usr/bin/test", &["-d", "/sys/module/astral_hwmon"])
+        .status().map_err(|e| format!("Cannot inspect loaded module: {e}"))?.success();
+    let units = ["astral-hwmon.service", "astral-guard.service",
+        "astral-guard.timer", "astral-guard-poweroff.service"];
+    let mut all_units_absent = true;
+    for unit in units {
+        let output = host_command("/usr/bin/systemctl",
+            &["show", unit, "-p", "LoadState", "--value"])
+            .output().map_err(|e| format!("Cannot inspect {unit}: {e}"))?;
+        if !output.status.success() {
+            return Err(format!("Cannot verify systemd unit {unit}; installation blocked"));
+        }
+        let state = String::from_utf8_lossy(&output.stdout);
+        match state.trim() {
+            "not-found" => {},
+            "loaded" | "masked" | "error" | "bad-setting" => all_units_absent = false,
+            other => return Err(format!("Unknown systemd state for {unit}: {other}; installation blocked")),
+        }
+    }
+    if found == 0 && !loaded && all_units_absent {
+        return Ok(("warning", "FRESH INSTALL CANDIDATE: No Astral files, loaded module, or systemd units detected. This is informational only; installation remains disabled until a separately verified privileged installer is available.".into()));
+    }
+    if found != 0 && found != files.len() || (found == 0 && (loaded || !all_units_absent)) {
+        return Ok(("error", format!("BLOCKED: Incomplete or inconsistent installation (files {found}/{}, loaded module={loaded}). No changes made.", files.len())));
+    }
+    // Existing installations are checked, never replaced by this preflight.
+    let (color, details) = recovery_triage()?;
+    Ok((color, format!("EXISTING INSTALLATION: {details} No installation attempted.")))
+}
+
+fn host_file_exists(path: &str) -> bool {
+    host_command("/usr/bin/test", &["-f", path])
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn host_background_action(
+    result: gtk::Label,
+    title: &'static str,
+    program: &'static str,
+    args: Vec<String>,
+) {
+    result.set_text(&format!("{title}: waiting for authorization / completion…"));
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        let answer = host_command(program, &borrowed).output().map(|output| {
+            let details = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            (output.status.success(), details.trim().to_string())
+        });
+        let _ = tx.send(answer);
+    });
+    glib::timeout_add_local(Duration::from_millis(200), move || match rx.try_recv() {
+        Ok(Ok((true, details))) => {
+            status(
+                &result,
+                &format!(
+                    "{title}: {}",
+                    if details.is_empty() {
+                        "Completed"
+                    } else {
+                        &details
+                    }
+                ),
+                "success",
+            );
+            glib::ControlFlow::Break
+        }
+        Ok(Ok((false, details))) => {
+            status(&result, &format!("{title} FAILED: {details}"), "error");
+            glib::ControlFlow::Break
+        }
+        Ok(Err(err)) => {
+            status(&result, &format!("{title} FAILED: {err}"), "error");
+            glib::ControlFlow::Break
+        }
+        Err(mpsc::TryRecvError::Disconnected) => {
+            status(&result, "Action failed: worker disconnected", "error");
+            glib::ControlFlow::Break
+        }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+    });
+}
+
 fn read_number(path: &Path) -> Option<f64> {
     fs::read_to_string(path).ok()?.trim().parse::<f64>().ok()
 }
@@ -35,37 +204,24 @@ fn status(label: &gtk::Label, text: &str, color: &str) {
     label.set_text(text);
     label.add_css_class(color);
 }
-fn unit_active(name: &str) -> bool {
-    Command::new("systemctl")
-        .args(["is-active", "--quiet", name])
-        .status()
-        .is_ok_and(|s| s.success())
-}
-fn unit_enabled(name: &str) -> bool {
-    Command::new("systemctl")
-        .args(["is-enabled", "--quiet", name])
-        .status()
-        .is_ok_and(|s| s.success())
-}
-
 // Testing16: read-only host Astral Guard status.
 // Development integration only; public release requires a restricted host interface.
 fn host_astral_status() -> Result<serde_json::Value, String> {
     // Flatpak's HOME is its private application directory.
     // The host publisher writes into this application's data directory.
-    let home = std::env::var("HOME")
-        .map_err(|e| format!("Cannot determine application home: {e}"))?;
+    let home =
+        std::env::var("HOME").map_err(|e| format!("Cannot determine application home: {e}"))?;
 
     let path = std::env::var("XDG_DATA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(home).join("data"))
         .join("astral-status.json");
 
-    let content = fs::read(&path)
-        .map_err(|e| format!("Cannot read Astral status snapshot: {e}"))?;
+    let content =
+        fs::read(&path).map_err(|e| format!("Cannot read Astral status snapshot: {e}"))?;
 
-    let result: serde_json::Value = serde_json::from_slice(&content)
-        .map_err(|e| format!("Invalid Astral status JSON: {e}"))?;
+    let result: serde_json::Value =
+        serde_json::from_slice(&content).map_err(|e| format!("Invalid Astral status JSON: {e}"))?;
 
     if result["schema_version"].as_u64() != Some(1) {
         return Err("Unsupported Astral status schema".to_string());
@@ -98,52 +254,6 @@ fn make_row(title: &str, grid: &gtk::Grid, idx: i32) -> gtk::Label {
     result
 }
 
-// Never treat spawning pkexec as proof that a privileged operation succeeded.
-fn background_action(result: gtk::Label, title: &'static str, args: Vec<String>) {
-    result.set_text(&format!("{title}: waiting for authorization / completion…"));
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let answer = Command::new("pkexec").args(&args).output().map(|output| {
-            let details = format!(
-                "{}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            (output.status.success(), details.trim().to_string())
-        });
-        let _ = tx.send(answer);
-    });
-    glib::timeout_add_local(Duration::from_millis(200), move || match rx.try_recv() {
-        Ok(Ok((true, details))) => {
-            status(
-                &result,
-                &format!(
-                    "{title}: {}",
-                    if details.is_empty() {
-                        "Completed"
-                    } else {
-                        &details
-                    }
-                ),
-                "success",
-            );
-            glib::ControlFlow::Break
-        }
-        Ok(Ok((false, details))) => {
-            status(&result, &format!("{title} FAILED: {details}"), "error");
-            glib::ControlFlow::Break
-        }
-        Ok(Err(e)) => {
-            status(&result, &format!("{title} FAILED: {e}"), "error");
-            glib::ControlFlow::Break
-        }
-        Err(mpsc::TryRecvError::Disconnected) => {
-            status(&result, "Action failed: worker disconnected", "error");
-            glib::ControlFlow::Break
-        }
-        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-    });
-}
 fn confirm_action(title: &'static str, details: &str, action: impl Fn() + 'static) {
     let dialog = gtk::MessageDialog::builder()
         .modal(true)
@@ -173,7 +283,9 @@ pub fn make_astral_page() -> gtk::Box {
     title.add_css_class("title-2");
     title.set_xalign(0.0);
     root.append(&title);
-    let note = gtk::Label::new(Some("Live monitoring and safety management. The independent Astral Guard systemd services continue operating when UGC closes."));
+    let note = gtk::Label::new(Some(
+        "Live monitoring and safety management. The independent Astral Guard systemd services continue operating when UGC closes.",
+    ));
     note.set_wrap(true);
     note.set_xalign(0.0);
     root.append(&note);
@@ -185,8 +297,11 @@ pub fn make_astral_page() -> gtk::Box {
     let safety_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let refresh = gtk::Button::with_label("Refresh Status");
     let startup = gtk::Button::with_label("Enable / Repair Startup");
-    let verify = gtk::Button::with_label("Run Guard Check");
-    let reinstall = gtk::Button::with_label("Install / Reinstall");
+    let verify = gtk::Button::with_label("Check Guard Health");
+    let reinstall = gtk::Button::with_label("Install Astral Guard (fresh only)");
+    let recovery_check = gtk::Button::with_label("Check Recovery State");
+    let install_preflight = gtk::Button::with_label("Check Installation Readiness");
+    let install_preview = gtk::Button::with_label("Preview Fresh Install (no changes)");
     let countdown = gtk::DropDown::from_strings(&[
         "5 seconds",
         "10 seconds",
@@ -194,12 +309,48 @@ pub fn make_astral_page() -> gtk::Box {
         "20 seconds",
         "30 seconds",
     ]);
-    countdown.set_selected(1);
+    // Read the actual emergency shutdown delay from the host.
+    // Never change the independent guard configuration here.
+    let current_delay = host_command(
+        "/usr/bin/systemctl",
+        &[
+            "show",
+            "astral-guard-poweroff.service",
+            "-p",
+            "ExecStartPre",
+            "--value",
+        ],
+    )
+    .output();
+
+    let selected_delay = current_delay.ok().and_then(|output| {
+        if !output.status.success() {
+            return None;
+        }
+
+        let details = String::from_utf8_lossy(&output.stdout);
+
+        for (index, seconds) in ["5", "10", "15", "20", "30"].iter().enumerate() {
+            let expected = format!("argv[]=/usr/bin/sleep {seconds} ;");
+            if details.contains(&expected) {
+                return Some(index as u32);
+            }
+        }
+
+        None
+    });
+
+    // An unknown configuration must not be presented as 10 seconds.
+    countdown.set_selected(selected_delay.unwrap_or(gtk::INVALID_LIST_POSITION));
+
     let configure = gtk::Button::with_label("Apply Shutdown Countdown…");
     safety_actions.append(&refresh);
     safety_actions.append(&startup);
     safety_actions.append(&verify);
     safety_actions.append(&reinstall);
+    safety_actions.append(&recovery_check);
+    safety_actions.append(&install_preflight);
+    safety_actions.append(&install_preview);
     safety_actions.append(&countdown);
     safety_actions.append(&configure);
     root.append(&safety_actions);
@@ -209,43 +360,86 @@ pub fn make_astral_page() -> gtk::Box {
     notifier_row.append(&siren);
     notifier_row.append(&notifier_repair);
     root.append(&notifier_row);
-    let manager_status = gtk::Label::new(Some("A critical shutdown is never simulated by this page. Configuration changes require graphical administrator authorization."));
+    let manager_status = gtk::Label::new(Some(
+        "A critical shutdown is never simulated by this page. Configuration changes require graphical administrator authorization.",
+    ));
     manager_status.set_xalign(0.0);
     manager_status.set_wrap(true);
     root.append(&manager_status);
 
-    // Testing16: sandbox-safe controls.
-    // Host management actions require a separately tested, authorized interface.
-    refresh.set_sensitive(false);
-    startup.set_sensitive(false);
-    verify.set_sensitive(false);
+    // Recovery/reinstallation must not be exposed until its privileged helper
+    // has been separately audited and tested on the host.
     reinstall.set_sensitive(false);
-    configure.set_sensitive(false);
-    notifier_repair.set_sensitive(false);
-    siren.set_sensitive(false);
-
-    countdown.set_sensitive(false);
-    manager_status.set_text(
-        "Read-only monitoring mode. Host management actions are unavailable inside this Flatpak. Astral Guard continues operating independently."
-    );
+    reinstall.set_tooltip_text(Some(
+        "Fresh installation disabled until clean-host RPM and polkit validation is complete",
+    ));
+    manager_status.set_text("Host controls enabled. Privileged actions require authorization; fresh installation remains disabled pending clean-host validation.");
 
     {
         let result = manager_status.clone();
         verify.connect_clicked(move |_| {
-            match Command::new("/var/usrlocal/bin/astral-guard").output() {
-                Ok(output) => {
-                    let code = output.status.code();
-                    let message = String::from_utf8_lossy(&output.stdout);
-                    let verdict = match code {
-                        Some(0) => "OK",
-                        Some(1) => "WARNING",
-                        Some(2) => "CRITICAL — inspect protection immediately",
-                        Some(3) => "UNKNOWN — protection not verified",
-                        _ => "ERROR — unexpected guard exit",
-                    };
-                    result.set_text(&format!("Guard check: {verdict}. {}", message.trim()));
+            // Read existing service state only. Never start the real guard.
+            let query = |args: &[&str]| -> Result<String, String> {
+                let output = host_command("/usr/bin/systemctl", args)
+                    .output()
+                    .map_err(|e| format!("Cannot query guard status: {e}"))?;
+                if !output.status.success() {
+                    return Err(format!(
+                        "Guard status query failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
                 }
-                Err(e) => result.set_text(&format!("Guard check could not run: {e}")),
+                Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            };
+
+            let health = (|| -> Result<(String, bool), String> {
+                let timer = query(&["is-active", "astral-guard.timer"])?;
+                let enabled = query(&["is-enabled", "astral-guard.timer"])?;
+                let details = query(&[
+                    "show", "astral-guard.service",
+                    "-p", "Result",
+                    "-p", "ExecMainStatus",
+                    "-p", "ExecMainExitTimestamp",
+                    "--no-pager",
+                ])?;
+
+                let mut guard_result = None;
+                let mut exit_code = None;
+                let mut completed = None;
+
+                for line in details.lines() {
+                    if let Some(value) = line.strip_prefix("Result=") {
+                        guard_result = Some(value);
+                    } else if let Some(value) = line.strip_prefix("ExecMainStatus=") {
+                        exit_code = Some(value);
+                    } else if let Some(value) = line.strip_prefix("ExecMainExitTimestamp=") {
+                        completed = Some(value);
+                    }
+                }
+
+                let guard_result = guard_result.ok_or("Missing guard result")?;
+                let exit_code = exit_code.ok_or("Missing guard exit code")?;
+                let completed = completed.ok_or("Missing guard completion time")?;
+
+                let healthy = timer == "active"
+                    && enabled == "enabled"
+                    && guard_result == "success"
+                    && exit_code == "0"
+                    && !completed.is_empty();
+
+                Ok((
+                    format!(
+                        "Guard health: timer {timer}, startup {enabled}, last result {guard_result}, exit code {exit_code}, completed {completed}. No guard execution requested."
+                    ),
+                    healthy,
+                ))
+            })();
+
+            match health {
+                Ok((message, healthy)) => {
+                    status(&result, &message, if healthy { "success" } else { "warning" });
+                }
+                Err(error) => status(&result, &error, "error"),
             }
         });
     }
@@ -254,6 +448,28 @@ pub fn make_astral_page() -> gtk::Box {
         let countdown = countdown.clone();
         configure.connect_clicked(move |_| {
             let seconds = match countdown.selected() { 0 => "5", 1 => "10", 2 => "15", 3 => "20", 4 => "30", _ => "10" };
+            // Avoid rewriting working protection when the selected delay
+            // already matches the host's emergency shutdown configuration.
+            let current = host_command(
+                "/usr/bin/systemctl",
+                &["show", "astral-guard-poweroff.service", "-p", "ExecStartPre", "--value"],
+            ).output();
+
+            if let Ok(output) = current {
+                if output.status.success() {
+                    let details = String::from_utf8_lossy(&output.stdout);
+                    let expected = format!("/usr/bin/sleep {seconds}");
+                    if details.contains(&expected) {
+                        status(
+                            &result,
+                            &format!("Shutdown countdown already configured for {seconds} seconds. No changes made."),
+                            "success",
+                        );
+                        return;
+                    }
+                }
+            }
+
             let dialog = gtk::MessageDialog::builder()
                 .modal(true)
                 .message_type(gtk::MessageType::Warning)
@@ -268,12 +484,12 @@ pub fn make_astral_page() -> gtk::Box {
             dialog.connect_response(move |dialog, response| {
                 dialog.close();
                 if response != gtk::ResponseType::Accept { return; }
-                let helper = "/usr/local/lib/astral-guard-manager/admin.py";
-                if !Path::new(helper).is_file() {
+                let helper = "/var/usrlocal/lib/astral-guard-manager/admin.py";
+                if !host_file_exists(helper) {
                     result.set_text("Administrator helper missing. No changes made.");
                     return;
                 }
-                background_action(result.clone(), "Shutdown countdown", vec![
+                host_background_action(result.clone(), "Shutdown countdown", "/usr/bin/pkexec", vec![
                     "/usr/bin/python3".into(), helper.into(), "configure".into(), seconds.clone()
                 ]);
             });
@@ -288,8 +504,10 @@ pub fn make_astral_page() -> gtk::Box {
                 .and_then(|dt| dt.format("%H:%M:%S"))
                 .map(|s| s.to_string())
                 .unwrap_or_else(|_| "now".into());
-            let timer = unit_active("astral-guard.timer");
-            let enabled = unit_enabled("astral-guard.timer");
+            let timer = host_command("/usr/bin/systemctl", &["is-active", "--quiet", "astral-guard.timer"])
+                .status().is_ok_and(|s| s.success());
+            let enabled = host_command("/usr/bin/systemctl", &["is-enabled", "--quiet", "astral-guard.timer"])
+                .status().is_ok_and(|s| s.success());
             let pins = sensor_dir().is_some();
             let message = format!(
                 "Manual refresh {now}: sensor {}, timer {}, startup {}. Live pins and protection checks also refresh automatically.",
@@ -304,20 +522,183 @@ pub fn make_astral_page() -> gtk::Box {
         let result = manager_status.clone();
         startup.connect_clicked(move |_| {
             let result = result.clone();
+
+            // Check the independent host services before offering repairs.
+            let services = ["astral-hwmon.service", "astral-guard.timer"];
+            let mut all_ready = true;
+
+            for service in services {
+                let check = |operation: &str| -> Result<String, String> {
+                    let output = host_command(
+                        "/usr/bin/systemctl", &[operation, service]
+                    ).output().map_err(|e| format!("{service}: {e}"))?;
+
+                    let state = String::from_utf8_lossy(&output.stdout)
+                        .trim().to_string();
+
+                    if state.is_empty() || !matches!(
+                        state.as_str(),
+                        "active" | "inactive" | "failed" | "activating"
+                        | "deactivating" | "enabled" | "disabled"
+                        | "static" | "masked" | "indirect"
+                    ) {
+                        return Err(format!(
+                            "Unable to determine {service} {operation} status: {state}"
+                        ));
+                    }
+
+                    Ok(state)
+                };
+
+                // Only offer the existing repair command for
+                // ordinary inactive or disabled services.
+                let active_state = match check("is-active") {
+                    Ok(state) => state,
+                    Err(error) => {
+                        status(&result, &error, "error");
+                        return;
+                    }
+                };
+
+                let enabled_state = match check("is-enabled") {
+                    Ok(state) => state,
+                    Err(error) => {
+                        status(&result, &error, "error");
+                        return;
+                    }
+                };
+
+                if !matches!(active_state.as_str(), "active" | "inactive")
+                    || !matches!(enabled_state.as_str(), "enabled" | "disabled")
+                {
+                    status(
+                        &result,
+                        &format!(
+                            "{service} requires manual review: active={active_state}, enabled={enabled_state}. No changes made."
+                        ),
+                        "error",
+                    );
+                    return;
+                }
+
+                if active_state != "active" || enabled_state != "enabled" {
+                    all_ready = false;
+                }
+            }
+
+            if all_ready {
+                status(
+                    &result,
+                    "Startup protection already active and enabled. No repair needed.",
+                    "success",
+                );
+                return;
+            }
+
             confirm_action("Enable / Repair Startup", "This enables and starts the existing Astral services. If the guard detects a real CRITICAL condition, the independent shutdown protection may activate. Continue?", move || {
-                background_action(result.clone(), "Startup repair", vec!["/usr/bin/systemctl".into(), "enable".into(), "--now".into(), "astral-hwmon.service".into(), "astral-guard.timer".into()]);
+                host_background_action(result.clone(), "Startup repair", "/usr/bin/pkexec", vec!["/usr/bin/systemctl".into(), "enable".into(), "--now".into(), "astral-hwmon.service".into(), "astral-guard.timer".into()]);
             });
         });
     }
     {
         let result = manager_status.clone();
+        recovery_check.connect_clicked(move |_| {
+            match recovery_triage() {
+                Ok((color, message)) => status(&result, &format!("Recovery check: {message}"), color),
+                Err(error) => status(&result, &format!("Recovery check unavailable: {error}"), "error"),
+            }
+        });
+    }
+    {
+        let result = manager_status.clone();
+        install_preflight.connect_clicked(move |_| {
+            match installation_preflight() {
+                Ok((color, message)) => status(&result, &format!("Installation preflight: {message}"), color),
+                Err(error) => status(&result, &format!("Installation preflight BLOCKED: {error}"), "error"),
+            }
+        });
+    }
+    // Testing86: preview only. Do not execute pkexec, flatpak-spawn or any installer.
+    // A GUI preflight result cannot authorize a privileged operation.
+    {
+        let result = manager_status.clone();
+        install_preview.connect_clicked(move |_| {
+            match installation_preflight() {
+                Ok((_, message)) => status(
+                    &result,
+                    &format!(
+                        "Fresh-install preview ONLY — {message} \
+                         Proposed future request: flatpak-spawn --host /usr/bin/pkexec \
+                         /usr/libexec/ugc-astral-installer install-fresh. \
+                         No installer was launched. The trusted helper is not deployed."
+                    ),
+                    "warning",
+                ),
+                Err(error) => status(
+                    &result,
+                    &format!("Fresh-install preview BLOCKED: {error}. No installer was launched."),
+                    "error",
+                ),
+            }
+        });
+    }
+    // Prepared fresh-host GUI path. The button stays disabled until an isolated
+    // clean-host installation validates the RPM, polkit and service activation.
+    // The root-owned installer must independently enforce all safety checks.
+    {
+        let result = manager_status.clone();
         reinstall.connect_clicked(move |_| {
+            let eligible = match installation_preflight() {
+                Ok(("warning", message)) if message.starts_with("FRESH INSTALL CANDIDATE:") => true,
+                Ok((_, message)) => {
+                    status(&result, &format!("Fresh installation blocked: {message}"), "error");
+                    false
+                }
+                Err(error) => {
+                    status(&result, &format!("Fresh installation blocked: {error}"), "error");
+                    false
+                }
+            };
+            if !eligible { return; }
+            if !host_command("/usr/bin/test", &["-x", "/usr/libexec/ugc-astral-installer"])
+                .status().is_ok_and(|s| s.success()) {
+                status(&result, "Trusted host installer not installed. No changes made.", "error");
+                return;
+            }
             let result = result.clone();
-            confirm_action("Install / Reinstall Protection", "Only use if protection is broken. The existing root helper rebuilds the driver and replaces safety units. This recovery path has not been end-to-end tested; a working installation should not be reinstalled. Continue anyway?", move || {
-                let helper = "/usr/local/lib/astral-guard-manager/admin.py";
-                if !Path::new(helper).is_file() { status(&result, "Root repair helper missing", "error"); return; }
-                background_action(result.clone(), "Reinstall", vec!["/usr/bin/python3".into(), helper.into(), "reinstall".into()]);
-            });
+            confirm_action("Install Astral Guard on this clean host?",
+                "Requires administrator authorization. Only a fresh, compatible system is supported. Existing protection will never be replaced. The privileged installer performs independent checks.",
+                move || {
+                    // Run outside the GTK event handler to avoid freezing the GUI
+                    // while the administrator authorization dialog is displayed.
+                    status(&result, "Requesting administrator authorization for fresh installation…", "warning");
+                    let result = result.clone();
+                    let (tx, rx) = mpsc::channel();
+                    thread::spawn(move || {
+                        let output = host_command("/usr/bin/pkexec", &[
+                            "/usr/libexec/ugc-astral-installer", "install-fresh"
+                        ]).output();
+                        let message = match output {
+                            Ok(o) if o.status.success() => ("success", format!("Fresh installation completed: {}", String::from_utf8_lossy(&o.stdout).trim())),
+                            Ok(o) => ("error", format!("Fresh installation failed or was cancelled ({}). Check for partial protection before retrying. {}", o.status, String::from_utf8_lossy(&o.stderr).trim())),
+                            Err(e) => ("error", format!("Cannot launch trusted installer: {e}")),
+                        };
+                        let _ = tx.send(message);
+                    });
+                    glib::timeout_add_local(Duration::from_millis(150), move || {
+                        match rx.try_recv() {
+                            Ok((color, message)) => {
+                                status(&result, &message, color);
+                                glib::ControlFlow::Break
+                            }
+                            Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                status(&result, "Installer status unavailable; inspect host before retrying.", "error");
+                                glib::ControlFlow::Break
+                            }
+                        }
+                    });
+                });
         });
     }
     {
@@ -327,17 +708,13 @@ pub fn make_astral_page() -> gtk::Box {
             confirm_action("Repair desktop notifier?",
                 "Restore the desktop notification launcher, siren and user service from the bundled UGC files. This does not change the independent root emergency shutdown protection.",
                 move || {
-                    let script = std::env::var_os("HOME").map(PathBuf::from)
-                        .map(|home| home.join(".local/share/ugc/astral-notifier-repair.sh"));
-                    let Some(script) = script.filter(|p| p.is_file()) else {
-                        status(&result, "Notifier repair package is missing. Reinstall the UGC Stage 4 notifier component.", "error");
-                        return;
-                    };
                     status(&result, "Desktop notifier repair in progress…", "warning");
                     let (tx, rx) = mpsc::channel();
                     thread::spawn(move || {
-                        let answer = Command::new("/usr/bin/bash").arg(&script).output()
-                            .map(|output| (output.status.success(), format!("{}{}",
+                        // Host shell expands its own HOME; never trust Flatpak HOME here.
+                        let answer = host_command("/usr/bin/bash", &["-c",
+                            "exec /usr/bin/bash \"$HOME/.local/share/ugc/astral-notifier-repair.sh\""])
+                            .output().map(|output| (output.status.success(), format!("{}{}",
                                 String::from_utf8_lossy(&output.stdout),
                                 String::from_utf8_lossy(&output.stderr))));
                         let _ = tx.send(answer);
@@ -368,26 +745,19 @@ pub fn make_astral_page() -> gtk::Box {
     {
         let result = manager_status.clone();
         siren.connect_clicked(move |_| {
-            let sound = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .map(|p| p.join(".local/share/astral-guard-manager/siren.wav"));
-            let Some(sound) = sound.filter(|p| p.is_file()) else {
-                status(&result, "Siren file not found", "error");
-                return;
-            };
-            let player = ["pw-play", "paplay", "aplay"].iter().find(|name| {
-                std::env::var_os("PATH").is_some_and(|paths| {
-                    std::env::split_paths(&paths).any(|dir| dir.join(name).is_file())
-                })
-            });
-            if let Some(player) = player {
-                match Command::new(player).arg(sound).spawn() {
-                    Ok(_) => result.set_text("Siren playback started; no shutdown requested."),
-                    Err(e) => status(&result, &format!("Siren failed: {e}"), "error"),
-                }
-            } else {
-                status(&result, "No supported audio player found", "error");
-            }
+            let command = r#"sound="$HOME/.local/share/astral-guard-manager/siren.wav"
+[ -f "$sound" ] || { echo "Siren file missing" >&2; exit 1; }
+for player in pw-play paplay aplay; do
+    if command -v "$player" >/dev/null 2>&1; then exec "$player" "$sound"; fi
+done
+echo "No supported audio player found" >&2
+exit 1"#;
+            host_background_action(
+                result.clone(),
+                "Siren test (no shutdown)",
+                "/usr/bin/bash",
+                vec!["-c".into(), command.into()],
+            );
         });
     }
 
@@ -421,12 +791,16 @@ pub fn make_astral_page() -> gtk::Box {
     let connector_power = gtk::Label::new(Some("Estimated connector power: waiting for readings…"));
     connector_power.set_xalign(0.0);
     root.append(&connector_power);
-    let power_note = gtk::Label::new(Some("Connector estimate = sum of six measured input currents × their voltages. This is not total GPU board power, and is not ASUS Cable Mileage."));
+    let power_note = gtk::Label::new(Some(
+        "Connector estimate = sum of six measured input currents × their voltages. This is not total GPU board power, and is not ASUS Cable Mileage.",
+    ));
     power_note.set_wrap(true);
     power_note.set_xalign(0.0);
     power_note.add_css_class("dim-label");
     root.append(&power_note);
-    let limits_note = gtk::Label::new(Some("Display thresholds: current warning ≥ 9.2 A, critical ≥ 9.5 A per input; voltage warning < 11.4 V, critical < 11.0 V. These values are display-only; the independent guard uses its own configuration."));
+    let limits_note = gtk::Label::new(Some(
+        "Display thresholds: current warning ≥ 9.2 A, critical ≥ 9.5 A per input; voltage warning < 11.4 V, critical < 11.0 V. These values are display-only; the independent guard uses its own configuration.",
+    ));
     limits_note.set_wrap(true);
     limits_note.set_xalign(0.0);
     limits_note.add_css_class("dim-label");
@@ -447,12 +821,16 @@ pub fn make_astral_page() -> gtk::Box {
     let trigger = make_row("Guard failure trigger", &checks, 6);
     let critical_only = make_row("Kernel module matches boot", &checks, 7);
     root.append(&checks);
-    let check_note = gtk::Label::new(Some("Configuration checks update every 5 seconds. ENABLED, CONFIGURED, and WIRED are not proof that emergency shutdown will work."));
+    let check_note = gtk::Label::new(Some(
+        "Configuration checks update every 5 seconds. ENABLED, CONFIGURED, and WIRED are not proof that emergency shutdown will work.",
+    ));
     check_note.set_wrap(true);
     check_note.set_xalign(0.0);
     check_note.add_css_class("dim-label");
     root.append(&check_note);
-    let disclaimer = gtk::Label::new(Some("These checks do not prove that a critical-event shutdown will execute. A real critical-event shutdown is not simulated here."));
+    let disclaimer = gtk::Label::new(Some(
+        "These checks do not prove that a critical-event shutdown will execute. A real critical-event shutdown is not simulated here.",
+    ));
     disclaimer.set_wrap(true);
     disclaimer.set_xalign(0.0);
     disclaimer.add_css_class("dim-label");

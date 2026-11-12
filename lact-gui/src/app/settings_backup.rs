@@ -39,9 +39,8 @@ impl SettingsBackup {
             "Invalid GUI preferences in backup"
         );
 
-        let _: crate::config::UiConfig =
-            serde_json::from_value(self.ui_config.clone())
-                .map_err(|err| anyhow::anyhow!("Invalid GUI preferences: {err}"))?;
+        let _: crate::config::UiConfig = serde_json::from_value(self.ui_config.clone())
+            .map_err(|err| anyhow::anyhow!("Invalid GUI preferences: {err}"))?;
 
         for name in self.profiles.keys() {
             anyhow::ensure!(
@@ -60,9 +59,7 @@ impl SettingsBackup {
 
 /// Collect GUI preferences and all saved GPU profiles without changing
 /// the currently active GPU configuration.
-pub async fn collect_backup(
-    client: &lact_client::DaemonClient,
-) -> anyhow::Result<SettingsBackup> {
+pub async fn collect_backup(client: &lact_client::DaemonClient) -> anyhow::Result<SettingsBackup> {
     use anyhow::Context;
 
     let profiles_info = client
@@ -111,9 +108,8 @@ pub fn restore_ui_preferences(backup: &SettingsBackup) -> anyhow::Result<()> {
 
     backup.validate()?;
 
-    let restored: crate::config::UiConfig =
-        serde_json::from_value(backup.ui_config.clone())
-            .context("Could not decode GUI preferences")?;
+    let restored: crate::config::UiConfig = serde_json::from_value(backup.ui_config.clone())
+        .context("Could not decode GUI preferences")?;
 
     let mut current = crate::CONFIG.write();
 
@@ -152,7 +148,18 @@ pub async fn restore_profiles_safely(
 
     let mut restored = 0;
 
-    for (name, original) in &backup.profiles {
+    let profiles = backup
+        .default_profile
+        .iter()
+        .map(|profile| ("Default", profile))
+        .chain(
+            backup
+                .profiles
+                .iter()
+                .map(|(name, profile)| (name.as_str(), profile)),
+        );
+
+    for (name, original) in profiles {
         let mut profile = original.clone();
 
         // Never enable imported automatic profile rules or hooks.
@@ -169,10 +176,7 @@ pub async fn restore_profiles_safely(
         }
 
         client
-            .create_profile(
-                new_name.clone(),
-                ProfileBase::Provided(profile),
-            )
+            .create_profile(new_name.clone(), ProfileBase::Provided(profile))
             .await
             .with_context(|| format!("Could not restore profile: {name}"))?;
 

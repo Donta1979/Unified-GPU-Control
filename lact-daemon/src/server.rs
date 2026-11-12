@@ -3,9 +3,9 @@ mod display;
 pub mod gpu_controller;
 pub mod handler;
 mod metrics;
-mod opencl;
+pub(crate) mod opencl;
 mod profiles;
-mod vulkan;
+pub(crate) mod vulkan;
 
 use self::handler::Handler;
 use crate::{config::Config, socket, system};

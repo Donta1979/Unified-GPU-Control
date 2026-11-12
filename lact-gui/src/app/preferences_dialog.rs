@@ -189,7 +189,7 @@ impl relm4::Component for PreferencesDialog {
                 },
 
                 add = &adw::PreferencesGroup {
-                    set_title: "Backup & Restore",
+                    set_title: "Backup &amp; Restore",
 
                     adw::ActionRow {
                         set_title: "Export Settings",

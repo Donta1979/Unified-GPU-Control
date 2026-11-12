@@ -1,6 +1,5 @@
-use crate::{APP_ID, GUI_VERSION, I18N, REPO_URL};
+use crate::{APP_ID, GUI_VERSION, REPO_URL, UGC_VERSION};
 use adw::prelude::AdwDialogExt;
-use i18n_embed_fl::fl;
 use lact_schema::GIT_COMMIT;
 use relm4::{ComponentParts, ComponentSender};
 
@@ -22,11 +21,20 @@ impl relm4::Component for AboutDialog {
 
     view! {
         adw::AboutDialog {
-            set_application_name: &fl!(I18N, "lact-gui"),
+            set_application_name: "Unified GPU Control",
             set_application_icon: APP_ID,
-            set_version: &format!("{GUI_VERSION} ({GIT_COMMIT})"),
-            set_website: &format!("{REPO_URL}/blob/master/docs/Navigation.md"),
-            set_issue_url: &format!("{REPO_URL}/issues"),
+            set_version: UGC_VERSION,
+            set_developer_name: "Donta1979",
+            set_comments: &format!(
+                "Unified GPU monitoring, tuning, Astral Guard and MangoHud configuration.\n\nBased on LACT {GUI_VERSION} ({GIT_COMMIT})."
+            ),
+            set_developers: &[
+                "Donta1979 - Unified GPU Control",
+                "Ilya Zlobintsev - Original LACT developer",
+                "LACT contributors",
+            ],
+            set_copyright: "Copyright © 2023 Ilya Zlobintsev and LACT contributors",
+            set_website: REPO_URL,
             set_license_type: gtk::License::MitX11,
         }
     }

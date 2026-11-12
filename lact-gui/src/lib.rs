@@ -28,6 +28,7 @@ static CONFIG: SharedState<UiConfig> = SharedState::new();
 static PANICKED: AtomicBool = AtomicBool::new(false);
 
 const GUI_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const UGC_VERSION: &str = "1.8";
 pub const APP_ID: &str = "io.github.Donta1979.UnifiedGPUControl";
 pub const REPO_URL: &str = "https://github.com/ilya-zlobintsev/LACT";
 

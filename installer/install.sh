@@ -82,12 +82,82 @@ fi
 echo
 echo "[3/5] Astral Guard"
 
-if systemctl is-active --quiet astral-guard.timer; then
-    echo "OK: Astral Guard timer is active."
+# An active timer alone does not prove the module or sensor is available.
+# This is an informational check; it never runs the guard or changes services.
+astral_status() {
+    local h name currents voltages
+    systemctl is-active --quiet astral-hwmon.service || return 1
+    systemctl is-active --quiet astral-guard.timer || return 1
+    systemctl is-enabled --quiet astral-guard.timer || return 1
+    [[ -d /sys/module/astral_hwmon ]] || return 1
+    for h in /sys/class/hwmon/hwmon*; do
+        [[ -r "$h/name" ]] || continue
+        IFS= read -r name < "$h/name" || continue
+        [[ "$name" == astral12vhpwr ]] || continue
+        currents=("$h"/curr[0-9]*_input)
+        voltages=("$h"/in[0-9]*_input)
+        [[ ${#currents[@]} -eq 6 && ${#voltages[@]} -eq 6 ]] || continue
+        return 0
+    done
+    return 1
+}
+
+if astral_status; then
+    echo "OK: Astral module, sensors, and monitoring services detected."
+    echo "NOTE: Emergency shutdown operation was not tested."
 else
-    echo "NOTICE: Astral Guard is not active."
+    echo "WARNING: Astral protection is not fully verified."
+    echo "No repair or installation was attempted."
     echo "It is optional and requires supported ASUS Astral hardware."
-    echo "Automatic installation is not enabled in this release."
+fi
+
+# Trusted Astral helper: verification-only integration.
+# Never replace existing protection or invoke the emergency guard.
+TRUSTED_ASTRAL_HELPER="$SCRIPT_DIR/ugc-astral-helper.py"
+
+if [[ -f "$TRUSTED_ASTRAL_HELPER" ]]; then
+    echo "Trusted Astral helper available (verification-only)."
+    echo "Automatic Astral installation and repair remain disabled."
+else
+    echo "NOTICE: Trusted Astral helper is not packaged."
+fi
+
+# Optional fresh-host installation: never run source code from Downloads as root.
+# An inactive timer is NOT evidence of a clean host. Refuse if ANY known
+# protection artifact exists, including a previously published support tree.
+UGC_ASTRAL_TRUSTED_ENTRY="/usr/libexec/ugc-astral-installer"
+ugc_astral_existing=0
+for artifact in \
+    /var/usrlocal/lib/astral-guard-manager \
+    /var/usrlocal/bin/astral-guard \
+    /var/usrlocal/lib/astral-hwmon/astral-hwmon.ko \
+    /etc/systemd/system/astral-hwmon.service \
+    /etc/systemd/system/astral-guard.service \
+    /etc/systemd/system/astral-guard.timer \
+    /etc/systemd/system/astral-guard-poweroff.service; do
+    if [[ -e "$artifact" || -L "$artifact" ]]; then
+        ugc_astral_existing=1
+        break
+    fi
+done
+if (( ugc_astral_existing )); then
+    echo "Existing or partial Astral installation detected."
+    echo "Fresh installation is blocked; existing protection will not be replaced."
+elif [[ -d /sys/module/astral_hwmon ]]; then
+    echo "Astral module or sensor detected; fresh installation is blocked."
+elif [[ -x "$UGC_ASTRAL_TRUSTED_ENTRY" ]] &&
+     [[ ! -L "$UGC_ASTRAL_TRUSTED_ENTRY" ]] &&
+     [[ "$(stat -c '%u:%a' "$UGC_ASTRAL_TRUSTED_ENTRY" 2>/dev/null)" == "0:755" ]]; then
+    echo "A trusted Astral installation entry point is available."
+    if ask "Request a fresh-host Astral Guard installation (administrator authorization required)?"; then
+        # Root-owned entry point must independently validate all safety preconditions.
+        if ! pkexec "$UGC_ASTRAL_TRUSTED_ENTRY" install-fresh; then
+            echo "WARNING: Astral installation did not complete."
+            echo "A partial installation may exist; inspect before retrying."
+        fi
+    fi
+else
+    echo "NOTICE: Trusted Astral installer is not provisioned; fresh installation remains unavailable."
 fi
 
 echo
@@ -183,10 +253,11 @@ else
     echo "NOTICE: MangoHud unavailable."
 fi
 
-if systemctl is-active --quiet astral-guard.timer; then
-    echo "OK: Astral Guard timer active."
+if astral_status; then
+    echo "OK: Astral module, sensors, and monitoring services detected."
+    echo "NOTE: Emergency shutdown operation was not tested."
 else
-    echo "NOTICE: Astral Guard not active."
+    echo "WARNING: Astral protection not fully verified."
 fi
 
 echo

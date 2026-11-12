@@ -139,3 +139,58 @@ async fn listen_device_events(handler: Handler) {
         handler.notify_reload_gpus(DRM_EVENT_COLLECT_DURATION).await;
     }
 }
+
+/// Read-only graphics API detection in the local application environment.
+pub fn detect_local_api_info(
+    gpu_id: &str,
+    pci_info: lact_schema::GpuPciInfo,
+    driver: String,
+) -> anyhow::Result<lact_schema::DeviceApiInfo> {
+    let (_, slot) = gpu_id
+        .rsplit_once('-')
+        .context("Missing PCI slot in GPU ID")?;
+
+    let controller = server::gpu_controller::CommonControllerInfo {
+        sysfs_path: std::path::PathBuf::from("/sys/bus/pci/devices").join(slot),
+        pci_info,
+        pci_slot_name: slot.to_owned(),
+        driver,
+    };
+
+    controller.get_slot_info()?;
+
+    let worker = std::thread::spawn(move || {
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
+        rt.block_on(async {
+            let mut vulkan_instances = server::vulkan::get_vulkan_info(&controller)
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::warn!("Local Vulkan detection: {err:#}");
+                    Vec::new()
+                });
+
+            vulkan_instances.dedup_by(|a, b| {
+                a.device_name == b.device_name
+                    && a.api_version == b.api_version
+                    && a.driver.name == b.driver.name
+                    && a.driver.info == b.driver.info
+                    && a.features == b.features
+                    && a.extensions == b.extensions
+            });
+
+            let opencl_instances = server::opencl::get_opencl_info(&controller, false).await;
+
+            Ok(lact_schema::DeviceApiInfo {
+                vulkan_instances,
+                opencl_instances,
+            })
+        })
+    });
+
+    worker
+        .join()
+        .map_err(|_| anyhow::anyhow!("Local API detection worker failed"))?
+}
