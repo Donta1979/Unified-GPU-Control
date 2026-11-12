@@ -344,22 +344,36 @@ pub fn make_astral_page() -> gtk::Box {
     countdown.set_selected(selected_delay.unwrap_or(gtk::INVALID_LIST_POSITION));
 
     let configure = gtk::Button::with_label("Apply Shutdown Countdown…");
+    let siren = gtk::Button::with_label("Test Siren (no shutdown)");
+    let notifier_repair = gtk::Button::with_label("Repair Desktop Notifier");
+
+    // Everyday controls remain visible.
     safety_actions.append(&refresh);
     safety_actions.append(&startup);
     safety_actions.append(&verify);
-    safety_actions.append(&reinstall);
-    safety_actions.append(&recovery_check);
-    safety_actions.append(&install_preflight);
-    safety_actions.append(&install_preview);
-    safety_actions.append(&countdown);
-    safety_actions.append(&configure);
+    safety_actions.append(&siren);
     root.append(&safety_actions);
-    let siren = gtk::Button::with_label("Test Siren (no shutdown)");
-    let notifier_repair = gtk::Button::with_label("Repair Desktop Notifier");
-    let notifier_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    notifier_row.append(&siren);
-    notifier_row.append(&notifier_repair);
-    root.append(&notifier_row);
+
+    // Less frequently used tools remain available without crowding the page.
+    let advanced = gtk::Expander::new(Some("Advanced"));
+    advanced.set_expanded(false);
+
+    let advanced_actions = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    let advanced_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    advanced_row.append(&reinstall);
+    advanced_row.append(&recovery_check);
+    advanced_row.append(&install_preflight);
+    advanced_row.append(&install_preview);
+    advanced_actions.append(&advanced_row);
+
+    let countdown_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    countdown_row.append(&countdown);
+    countdown_row.append(&configure);
+    countdown_row.append(&notifier_repair);
+    advanced_actions.append(&countdown_row);
+
+    advanced.set_child(Some(&advanced_actions));
+    root.append(&advanced);
     let manager_status = gtk::Label::new(Some(
         "A critical shutdown is never simulated by this page. Configuration changes require graphical administrator authorization.",
     ));
