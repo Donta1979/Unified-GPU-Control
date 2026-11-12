@@ -1,0 +1,24 @@
+{
+  "files": {
+    "kernel-source/Kbuild": "fcfa195da7716e0eba4a356f1b62236f024ec139f2a7ef7c2ab29050085610cf",
+    "kernel-source/SOURCE-SHA256.json": "8cbda0f03ea4385a6601eea146cfacc8ab00dc5e7c0379c46afd5b3c417b2dd8",
+    "kernel-source/astral.h": "c43496577299b8f953a495fbb78a97bb2bf50c84814ffd2611b9a42914eb3648",
+    "kernel-source/astral_detect.c": "d9362f907c1c46444c3ba5f6d15c5cf9aac1d72d46cdd5684c34e73e93f41cfe",
+    "kernel-source/astral_hwmon.c": "a67331b88963717ce2f49568ed81c4978573061323018f51e9a25c9c8f0a5dfc",
+    "kernel-source/astral_regs.c": "ee816538c36a40cf5079e4551f2cba000f70caf76208ba23ad8a0560ef7a3d17",
+    "payload/SHA256SUMS": "d26c8ae76fc269f891e2fca118e6f6edc1b90e71e4ffe96a31605519226725fc",
+    "payload/astral-guard": "1d0cddf86c3b5a0b44174ea2b9b0f6881b65d4f78a399a4d948a5782c0631c38",
+    "payload/astral-hwmon.ko": "03d81f8b9aed4a75caac136b2b4ae59521accc5dc35a1be033f8e6f60ff16845",
+    "payload/licenses/GPL-2.0.txt": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+    "payload/licenses/MIT.txt": "1fd5e6615fcd24827864b425c023fca6a7d027115935f436880bb00754edf722",
+    "payload/units/astral-guard-poweroff.service": "3f1582f8710adaabda72fc62b0a0119cc3798157e3f8205ef4df4111941ddd5f",
+    "payload/units/astral-guard.service": "d9aaa82cb641afda0e604664d7b52e0602761ad8cffe96003550fe1c6a12ae4f",
+    "payload/units/astral-guard.timer": "d5410290a64047859fe16ab7a81dcab0014e8c5ec7365422e75d82652e71b8a5",
+    "payload/units/astral-hwmon.service": "c87a430b593adc80985b0dd18a3051fca1cb4739157a362a9f3ea2fe82ae74a4",
+    "ugc-astral-deploy.py": "465fcb8029a3948480de371cf88c0e80d2bccdb5b1d2956506ba2512869fa5f5",
+    "ugc-astral-fresh-install.py": "00dc15b9e60f948bf595e07dcef9398661b587e557fb1f8d3cf891ec2b152381",
+    "ugc-astral-helper.py": "f7cbdbbb38df3da0cf7450e78510f5441158589eb289551ee2317ab3340b8efe",
+    "ugc-astral-kernel-recovery.py": "379dac3d14128c3a65f452939a29c1f7fa875ec7b996224a0efcdeb333bd8c93"
+  },
+  "schema_version": 1
+}

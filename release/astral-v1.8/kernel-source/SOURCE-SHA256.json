@@ -1,0 +1,10 @@
+{
+  "format": "ugc-astral-kernel-source-v1",
+  "files": {
+    "Kbuild": "fcfa195da7716e0eba4a356f1b62236f024ec139f2a7ef7c2ab29050085610cf",
+    "astral_hwmon.c": "a67331b88963717ce2f49568ed81c4978573061323018f51e9a25c9c8f0a5dfc",
+    "astral_detect.c": "d9362f907c1c46444c3ba5f6d15c5cf9aac1d72d46cdd5684c34e73e93f41cfe",
+    "astral_regs.c": "ee816538c36a40cf5079e4551f2cba000f70caf76208ba23ad8a0560ef7a3d17",
+    "astral.h": "c43496577299b8f953a495fbb78a97bb2bf50c84814ffd2611b9a42914eb3648"
+  }
+}

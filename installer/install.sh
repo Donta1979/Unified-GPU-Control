@@ -125,7 +125,7 @@ fi
 # Optional fresh-host installation: never run source code from Downloads as root.
 # An inactive timer is NOT evidence of a clean host. Refuse if ANY known
 # protection artifact exists, including a previously published support tree.
-UGC_ASTRAL_TRUSTED_ENTRY="/usr/libexec/ugc-astral-installer"
+UGC_ASTRAL_TRUSTED_ENTRY="/var/lib/ugc/astral-release/ugc-astral-deploy.py"
 ugc_astral_existing=0
 for artifact in \
     /var/usrlocal/lib/astral-guard-manager \
@@ -157,7 +157,29 @@ elif [[ -x "$UGC_ASTRAL_TRUSTED_ENTRY" ]] &&
         fi
     fi
 else
-    echo "NOTICE: Trusted Astral installer is not provisioned; fresh installation remains unavailable."
+    echo "NOTICE: Trusted Astral installer is not provisioned."
+
+    UGC_ASTRAL_RELEASE="$SCRIPT_DIR/astral-v1.8"
+    UGC_ASTRAL_PROVISIONER="$SCRIPT_DIR/ugc-astral-provision.py"
+
+    if [[ -f "$UGC_ASTRAL_PROVISIONER" &&
+          -f "$UGC_ASTRAL_RELEASE/PACKAGE-SHA256.json" &&
+          -f "$UGC_ASTRAL_RELEASE/PACKAGE-SHA256.sig" ]]; then
+
+        echo "Signed Astral release package detected."
+
+        if ask "Provision the verified Astral installer (administrator authorization required)?"; then
+            if pkexec /usr/bin/python3 "$UGC_ASTRAL_PROVISIONER" "$UGC_ASTRAL_RELEASE"; then
+                echo "Astral installer provisioned successfully."
+                echo "Fresh installation requires a separate confirmation."
+            else
+                echo "WARNING: Astral provisioning did not complete."
+                echo "No automatic retry or cleanup will be attempted."
+            fi
+        fi
+    else
+        echo "NOTICE: Signed Astral release package is incomplete."
+    fi
 fi
 
 echo

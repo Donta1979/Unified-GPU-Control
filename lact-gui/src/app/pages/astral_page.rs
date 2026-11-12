@@ -461,7 +461,10 @@ pub fn make_astral_page() -> gtk::Box {
         let result = manager_status.clone();
         let countdown = countdown.clone();
         configure.connect_clicked(move |_| {
-            let seconds = match countdown.selected() { 0 => "5", 1 => "10", 2 => "15", 3 => "20", 4 => "30", _ => "10" };
+            let seconds = match countdown.selected() { 0 => "5", 1 => "10", 2 => "15", 3 => "20", 4 => "30", _ => {
+                status(&result, "Select a valid shutdown countdown first. No changes made.", "warning");
+                return;
+            } };
             // Avoid rewriting working protection when the selected delay
             // already matches the host's emergency shutdown configuration.
             let current = host_command(
@@ -600,6 +603,40 @@ pub fn make_astral_page() -> gtk::Box {
                 }
             }
 
+            // A kernel mismatch is not a systemd startup problem. Only a
+            // separately authenticated, root-owned recovery entrypoint may
+            // rebuild the driver. Never unload an active Astral module.
+            let kernel = host_command("/usr/bin/uname", &["-r"]).output();
+            let module = "/var/usrlocal/lib/astral-hwmon/astral-hwmon.ko";
+            let magic = host_command("/usr/sbin/modinfo", &["-F", "vermagic", module]).output();
+            if let (Ok(kernel), Ok(magic)) = (kernel, magic) {
+                if kernel.status.success() && magic.status.success() {
+                    let current = String::from_utf8_lossy(&kernel.stdout).trim().to_string();
+                    let built_for = String::from_utf8_lossy(&magic.stdout)
+                        .split_whitespace().next().unwrap_or("").to_string();
+                    if !current.is_empty() && !built_for.is_empty() && current != built_for {
+                        let loaded = host_command("/usr/bin/test", &["-d", "/sys/module/astral_hwmon"])
+                            .status().is_ok_and(|s| s.success());
+                        if loaded {
+                            status(&result, "Kernel mismatch detected, but Astral is loaded. Automatic replacement refused to preserve active protection.", "error");
+                            return;
+                        }
+                        let recovery = "/var/lib/ugc/astral-release/ugc-astral-kernel-recovery.py";
+                        // Checking existence does not establish publisher trust;
+                        // the privileged entrypoint independently checks root
+                        // ownership, permissions and pinned source hashes.
+                        if !host_file_exists(recovery) {
+                            status(&result, "Kernel mismatch detected. The authenticated recovery component has not been installed; no repair attempted.", "error");
+                            return;
+                        }
+                        confirm_action("Enable / Repair Startup", "The installed driver targets an older kernel. Request administrator authorization to rebuild it from the pinned Astral source? This will not unload an active driver.", move || {
+                            host_background_action(result.clone(), "Kernel recovery", "/usr/bin/pkexec", vec!["/usr/bin/python3".into(), recovery.into(), "recover".into()]);
+                        });
+                        return;
+                    }
+                }
+            }
+
             if all_ready {
                 status(
                     &result,
@@ -643,7 +680,7 @@ pub fn make_astral_page() -> gtk::Box {
                     &format!(
                         "Fresh-install preview ONLY — {message} \
                          Proposed future request: flatpak-spawn --host /usr/bin/pkexec \
-                         /usr/libexec/ugc-astral-installer install-fresh. \
+                         /var/lib/ugc/astral-release/ugc-astral-deploy.py install-fresh. \
                          No installer was launched. The trusted helper is not deployed."
                     ),
                     "warning",
@@ -674,7 +711,7 @@ pub fn make_astral_page() -> gtk::Box {
                 }
             };
             if !eligible { return; }
-            if !host_command("/usr/bin/test", &["-x", "/usr/libexec/ugc-astral-installer"])
+            if !host_command("/usr/bin/test", &["-x", "/var/lib/ugc/astral-release/ugc-astral-deploy.py"])
                 .status().is_ok_and(|s| s.success()) {
                 status(&result, "Trusted host installer not installed. No changes made.", "error");
                 return;
@@ -690,7 +727,7 @@ pub fn make_astral_page() -> gtk::Box {
                     let (tx, rx) = mpsc::channel();
                     thread::spawn(move || {
                         let output = host_command("/usr/bin/pkexec", &[
-                            "/usr/libexec/ugc-astral-installer", "install-fresh"
+                            "/var/lib/ugc/astral-release/ugc-astral-deploy.py", "install-fresh"
                         ]).output();
                         let message = match output {
                             Ok(o) if o.status.success() => ("success", format!("Fresh installation completed: {}", String::from_utf8_lossy(&o.stdout).trim())),
@@ -1000,7 +1037,18 @@ exit 1"#;
 
                     match check {
                         Some(check) if check["ok"].as_bool() == Some(true) => {
-                            status(label, "CONFIGURED (NOT TESTED)", "success");
+                            let display = match *name {
+                                "Kernel driver loaded" => "LOADED",
+                                "Guard executable installed" => "INSTALLED",
+                                "Periodic guard timer" => "ACTIVE",
+                                "Driver starts at boot" => "ENABLED",
+                                "Sensor interface available" => "AVAILABLE",
+                                "Emergency shutdown action" => "CONFIGURED",
+                                "Critical-only trigger" => "WIRED",
+                                "Kernel module matches boot" => "MATCHES",
+                                _ => "VERIFIED",
+                            };
+                            status(label, display, "success");
                         }
                         Some(check) if check["ok"].as_bool() == Some(false) => {
                             status(label, "NOT VERIFIED", "error");

@@ -1,0 +1,9 @@
+[Unit]
+Description=Power off after a CRITICAL 12VHPWR verdict
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sh -c 'test "$MONITOR_EXIT_STATUS" = 2'
+ExecStartPre=/usr/bin/wall "ASTRAL GUARD CRITICAL: 12VHPWR safety limit exceeded. Powering off in 10 seconds."
+ExecStartPre=/usr/bin/sleep 10
+ExecStart=/usr/bin/systemctl poweroff

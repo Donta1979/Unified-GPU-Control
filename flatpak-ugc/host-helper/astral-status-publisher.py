@@ -107,8 +107,25 @@ def status():
     add("Kernel module matches boot", modver == kernel,
         f"Module built for {modver or 'unknown'}; running kernel is {kernel}",
         warning=True)
+    # Kernel-update recovery readiness; diagnostic only.
+    build_dir = Path("/lib/modules") / kernel / "build"
+    recovery = {
+        "kernel_build_available": build_dir.is_dir(),
+        "dkms_available": shutil.which("dkms") is not None,
+        "make_available": shutil.which("make") is not None,
+        "gcc_available": shutil.which("gcc") is not None,
+        "module_matches_kernel": modver == kernel,
+    }
+    recovery["build_prerequisites_available"] = all(
+        recovery[key] for key in (
+            "kernel_build_available",
+            "dkms_available",
+            "make_available",
+            "gcc_available",
+        )
+    )
     last = units["astral-guard.service"]
-    return {"time":time.strftime("%Y-%m-%d %H:%M:%S"), "kernel":kernel,
+    return {"recovery":recovery, "time":time.strftime("%Y-%m-%d %H:%M:%S"), "kernel":kernel,
             "module_version":modver or "not found", "guard_path":guard or "not found",
             "sensor":sensor, "pins":pins, "units":units, "checks":checks,
             "all_ok":all(c["ok"] for c in checks),
@@ -128,6 +145,7 @@ def collect():
         "last_exit": result["last_exit"],
         "kernel": result["kernel"],
         "module_version": result["module_version"],
+        "recovery": result["recovery"],
     }
 
 

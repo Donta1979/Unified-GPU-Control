@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the 12VHPWR connector periodically
+
+[Timer]
+OnBootSec=10s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

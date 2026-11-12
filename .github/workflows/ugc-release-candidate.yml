@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+  attestations: write
 
 jobs:
   build-flatpak:
@@ -46,20 +48,62 @@ jobs:
             dist/Unified-GPU-Control-v1.8-x86_64.flatpak \
             io.github.Donta1979.UnifiedGPUControl
 
+      - name: Sign Astral release manifest
+        env:
+          UGC_SIGNING_KEY: ${{ secrets.UGC_RELEASE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$UGC_SIGNING_KEY"
+          keyfile="$(mktemp)"
+          chmod 600 "$keyfile"
+          trap 'rm -f "$keyfile"' EXIT
+          printf '%s\n' "$UGC_SIGNING_KEY" > "$keyfile"
+          openssl pkeyutl -sign -rawin \
+            -inkey "$keyfile" \
+            -in release/astral-v1.8/PACKAGE-SHA256.json \
+            -out release/astral-v1.8/PACKAGE-SHA256.sig
+          openssl pkeyutl -verify -rawin -pubin \
+            -inkey installer/ugc-release-signing-public.pem \
+            -in release/astral-v1.8/PACKAGE-SHA256.json \
+            -sigfile release/astral-v1.8/PACKAGE-SHA256.sig
+
       - name: Package installer and documentation
         run: |
           mkdir -p dist/release
           cp installer/install.sh dist/release/install.sh
+          mkdir -p dist/release/astral-v1.8
+          cp -a release/astral-v1.8/payload dist/release/astral-v1.8/
+          cp release/astral-v1.8/ugc-astral-deploy.py dist/release/astral-v1.8/
+          cp release/astral-v1.8/ugc-astral-fresh-install.py dist/release/astral-v1.8/
+          cp release/astral-v1.8/ugc-astral-helper.py dist/release/astral-v1.8/
+          cp release/astral-v1.8/ugc-astral-kernel-recovery.py dist/release/astral-v1.8/
+          cp -a release/astral-v1.8/kernel-source dist/release/astral-v1.8/
+          cp release/astral-v1.8/PACKAGE-SHA256.json dist/release/astral-v1.8/
+          cp release/astral-v1.8/PACKAGE-SHA256.sig dist/release/astral-v1.8/
+          cp installer/ugc-release-signing-public.pem dist/release/
+          cp installer/verify-astral-release.py dist/release/verify-astral-release.py
+          cp installer/ugc-astral-provision.py dist/release/ugc-astral-provision.py
+          python3 dist/release/verify-astral-release.py dist/release/astral-v1.8
           mkdir -p dist/release/host-helper/systemd
           cp flatpak-ugc/host-helper/astral-status-publisher.py dist/release/host-helper/
           cp flatpak-ugc/host-helper/systemd/ugc-astral-status.service dist/release/host-helper/systemd/
           cp flatpak-ugc/host-helper/systemd/ugc-astral-status.timer dist/release/host-helper/systemd/
           cp dist/Unified-GPU-Control-v1.8-x86_64.flatpak dist/release/
           cp README.md dist/release/README.md
+          cp RELEASE-NOTES-v1.8.md dist/release/RELEASE-NOTES-v1.8.md
+          mkdir -p dist/release/res/screenshots
+          cp res/screenshots/*.png dist/release/res/screenshots/
           cp LICENSE dist/release/LICENSE
           chmod +x dist/release/install.sh
           tar -czf dist/Unified-GPU-Control-v1.8-Linux-x86_64.tar.gz \
             -C dist/release .
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/Unified-GPU-Control-v1.8-Linux-x86_64.tar.gz
+            dist/Unified-GPU-Control-v1.8-x86_64.flatpak
 
       - name: Upload release candidate
         uses: actions/upload-artifact@v4

@@ -1,0 +1,12 @@
+[Unit]
+Description=Check the 12VHPWR connector
+OnFailure=astral-guard-poweroff.service
+
+[Service]
+Type=oneshot
+ExecStart=/var/usrlocal/bin/astral-guard --quiet
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateNetwork=yes
+SuccessExitStatus=1 3

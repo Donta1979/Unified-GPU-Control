@@ -1,0 +1,14 @@
+[Unit]
+Description=Load ASUS Astral 12VHPWR hardware monitor
+After=local-fs.target
+
+[Service]
+User=root
+Type=oneshot
+CapabilityBoundingSet=CAP_SYS_MODULE
+ProtectKernelModules=no
+ExecStart=/bin/sh -c 'test -d /sys/module/astral_hwmon || exec /usr/bin/insmod /var/usrlocal/lib/astral-hwmon/astral-hwmon.ko'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
