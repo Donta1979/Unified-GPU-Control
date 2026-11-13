@@ -132,7 +132,7 @@ fi
 
 # Trusted Astral helper: verification-only integration.
 # Never replace existing protection or invoke the emergency guard.
-TRUSTED_ASTRAL_HELPER="$SCRIPT_DIR/../release/astral-v1.8/ugc-astral-helper.py"
+TRUSTED_ASTRAL_HELPER="$SCRIPT_DIR/astral-v1.8/ugc-astral-helper.py"
 
 if [[ -f "$TRUSTED_ASTRAL_HELPER" ]]; then
     echo "Trusted Astral helper available (verification-only)."
@@ -178,7 +178,7 @@ elif [[ -x "$UGC_ASTRAL_TRUSTED_ENTRY" ]] &&
 else
     echo "NOTICE: Trusted Astral installer is not provisioned."
 
-    UGC_ASTRAL_RELEASE="$SCRIPT_DIR/../release/astral-v1.8"
+    UGC_ASTRAL_RELEASE="$SCRIPT_DIR/astral-v1.8"
     UGC_ASTRAL_PROVISIONER="$SCRIPT_DIR/ugc-astral-provision.py"
 
     if [[ -f "$UGC_ASTRAL_PROVISIONER" &&
@@ -239,7 +239,7 @@ if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
     flatpak build-import-bundle "$TEMP_REPO" "$BUNDLE" >/dev/null
 
     INSTALLED_COMMIT="$(flatpak info --user --show-commit "$APP_ID")"
-    BUNDLE_REF="app/$APP_ID/x86_64/stable"
+    BUNDLE_REF="app/$APP_ID/x86_64/master"
     BUNDLE_COMMIT="$(ostree --repo="$TEMP_REPO" rev-parse "$BUNDLE_REF")"
 
     if [[ "$INSTALLED_COMMIT" == "$BUNDLE_COMMIT" ]]; then
