@@ -58,25 +58,35 @@ else
     fi
 
     if installed "$LACT_ID"; then
+        echo "LACT is installed; its daemon must also be running."
         if ask "Launch LACT's official service setup?"; then
-            flatpak run "$LACT_ID"
+            flatpak run "$LACT_ID" || echo "WARNING: LACT setup did not complete successfully."
         fi
     fi
+fi
+
+if systemctl is-active --quiet lactd.service &&
+   [[ -S /run/lactd.sock ]]; then
+    echo "PASS: LACT daemon and socket available."
+else
+    echo "WARNING: LACT daemon is not ready."
+    echo "GPU controls requiring the daemon may not work."
+    echo "Existing LACT configuration was preserved."
 fi
 
 echo
 echo "[2/5] MangoHud"
 
 if command -v mangohud >/dev/null 2>&1; then
-    echo "OK: MangoHud is installed."
+    echo "PASS: Host MangoHud executable available."
+elif installed "org.freedesktop.Platform.VulkanLayer.MangoHud"; then
+    echo "PASS: Flatpak MangoHud Vulkan layer installed."
+    echo "NOTE: Host MangoHud executable was not found."
+    echo "Non-Flatpak games may need the host package."
 else
-    echo "MangoHud is not installed."
-
-    if ask "Open Bazzite's package installer instructions?"; then
-        echo "MangoHud installation depends on the host distribution."
-        echo "For Bazzite, consult its supported package installation"
-        echo "method before layering additional packages."
-    fi
+    echo "WARNING: MangoHud was not detected."
+    echo "MangoHud installation is required for the OSD."
+    echo "No unsupported package layering was attempted."
 fi
 
 echo
@@ -113,7 +123,7 @@ fi
 
 # Trusted Astral helper: verification-only integration.
 # Never replace existing protection or invoke the emergency guard.
-TRUSTED_ASTRAL_HELPER="$SCRIPT_DIR/ugc-astral-helper.py"
+TRUSTED_ASTRAL_HELPER="$SCRIPT_DIR/astral-v1.8/ugc-astral-helper.py"
 
 if [[ -f "$TRUSTED_ASTRAL_HELPER" ]]; then
     echo "Trusted Astral helper available (verification-only)."
@@ -171,7 +181,30 @@ else
         if ask "Provision the verified Astral installer (administrator authorization required)?"; then
             if pkexec /usr/bin/python3 "$UGC_ASTRAL_PROVISIONER" "$UGC_ASTRAL_RELEASE"; then
                 echo "Astral installer provisioned successfully."
-                echo "Fresh installation requires a separate confirmation."
+                # Run only the independently verified, root-owned staged entry.
+                # Never execute the release's deployment script directly as root.
+                if [[ -x "$UGC_ASTRAL_TRUSTED_ENTRY" &&
+                      ! -L "$UGC_ASTRAL_TRUSTED_ENTRY" &&
+                      "$(stat -c '%u:%a' "$UGC_ASTRAL_TRUSTED_ENTRY" 2>/dev/null)" == "0:755" ]]; then
+                    if ask "Activate verified Astral Guard protection now (administrator authorization required)?"; then
+                        if pkexec "$UGC_ASTRAL_TRUSTED_ENTRY" install-fresh; then
+                            if astral_status; then
+                                echo "OK: Astral Guard installation and monitoring verified."
+                            else
+                                echo "WARNING: Installation returned success, but monitoring is not verified."
+                                echo "Do not assume emergency shutdown protection is active."
+                            fi
+                        else
+                            echo "WARNING: Astral installation failed or was cancelled."
+                            echo "Do not rerun blindly; partial protection files may exist."
+                        fi
+                    else
+                        echo "NOTICE: Astral Guard was provisioned but not activated."
+                    fi
+                else
+                    echo "WARNING: Trusted Astral entry point missing or unsafe after provisioning."
+                    echo "Astral Guard was not activated."
+                fi
             else
                 echo "WARNING: Astral provisioning did not complete."
                 echo "No automatic retry or cleanup will be attempted."
@@ -198,7 +231,7 @@ if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
 
     INSTALLED_COMMIT="$(flatpak info --user --show-commit "$APP_ID")"
     BUNDLE_REF="app/$APP_ID/x86_64/master"
-BUNDLE_COMMIT="$(ostree --repo="$TEMP_REPO" rev-parse "$BUNDLE_REF")"
+    BUNDLE_COMMIT="$(ostree --repo="$TEMP_REPO" rev-parse "$BUNDLE_REF")"
 
     if [[ "$INSTALLED_COMMIT" == "$BUNDLE_COMMIT" ]]; then
         echo "OK: This exact UGC version is already installed."
@@ -256,7 +289,7 @@ fi
 echo
 echo "[5/5] Final verification"
 
-if flatpak info --user "$APP_ID" >/dev/null 2>&1; then
+if installed "$APP_ID"; then
     echo "OK: Unified GPU Control installed."
 else
     echo "WARNING: Unified GPU Control not installed for this user."
@@ -285,3 +318,7 @@ fi
 echo
 echo "Installation checks completed."
 echo "Existing GPU safety services were not deliberately changed."
+if ! installed "$APP_ID"; then
+    echo "ERROR: UGC was not installed. See the messages above."
+    exit 1
+fi

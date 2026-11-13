@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Unified GPU Control
+Comment=Install Unified GPU Control v1.8 and check required components
+Icon=system-software-install
+Terminal=false
+Categories=System;Utility;
+Exec=sh -c "exec bash \"$(dirname \"$1\")/install-gui.sh\"" sh %k

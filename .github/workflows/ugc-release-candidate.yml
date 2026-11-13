@@ -71,6 +71,10 @@ jobs:
         run: |
           mkdir -p dist/release
           cp installer/install.sh dist/release/install.sh
+          cp installer/install-gui.sh dist/release/install-gui.sh
+          cp "installer/Install Unified GPU Control.desktop" "dist/release/Install Unified GPU Control.desktop"
+          chmod 755 dist/release/install.sh dist/release/install-gui.sh
+          chmod 755 "dist/release/Install Unified GPU Control.desktop"
           mkdir -p dist/release/astral-v1.8
           cp -a release/astral-v1.8/payload dist/release/astral-v1.8/
           cp release/astral-v1.8/ugc-astral-deploy.py dist/release/astral-v1.8/
