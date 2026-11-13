@@ -5,5 +5,4 @@ Comment=Install Unified GPU Control v1.8 and check required components
 Icon=system-software-install
 Terminal=false
 Categories=System;Utility;
-Exec=/usr/bin/bash install-gui.sh
-Path=/home/Donta1979/Downloads/UGC-Testing v1.8.0/Unified-GPU-Control-v1.8-Linux-x86_64
+Exec=/usr/bin/bash -c "exec /usr/bin/bash \\"\\$(dirname \\"\\$0\\")/install-gui.sh\\"" %k
