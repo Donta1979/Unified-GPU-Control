@@ -385,9 +385,9 @@ pub fn make_astral_page() -> gtk::Box {
     // has been separately audited and tested on the host.
     reinstall.set_sensitive(false);
     reinstall.set_tooltip_text(Some(
-        "Fresh installation disabled until clean-host RPM and polkit validation is complete",
+        "Fresh installation is available through the UGC release installer; in-app reinstallation is unavailable",
     ));
-    manager_status.set_text("Host controls enabled. Privileged actions require authorization; fresh installation remains disabled pending clean-host validation.");
+    manager_status.set_text("Host controls enabled. Privileged actions require authorization. Use the UGC release installer for fresh Astral Guard installation.");
 
     {
         let result = manager_status.clone();

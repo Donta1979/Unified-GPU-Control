@@ -46,7 +46,16 @@ if systemctl is-active --quiet lactd.service &&
 elif systemctl cat lactd.service >/dev/null 2>&1; then
     echo "WARNING: Existing LACT service is not fully operational."
     echo "Its configuration will not be replaced."
+
+    if ! installed "$LACT_ID"; then
+        echo "LACT Flatpak is missing."
+        if ask "Install LACT from Flathub?"; then
+            flatpak install --system flathub "$LACT_ID"
+        fi
+    fi
+
     echo "Check: systemctl status lactd.service"
+    echo "Existing LACT service requires manual repair."
 
 else
     if ! installed "$LACT_ID"; then
