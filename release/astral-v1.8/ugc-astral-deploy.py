@@ -16,7 +16,7 @@ import shutil
 
 STAGE = Path('/var/lib/ugc/astral-release')
 BASE = Path('/var/usrlocal/lib/astral-guard-manager')
-PINNED = {'payload/SHA256SUMS': 'd26c8ae76fc269f891e2fca118e6f6edc1b90e71e4ffe96a31605519226725fc', 'payload/astral-guard': '1d0cddf86c3b5a0b44174ea2b9b0f6881b65d4f78a399a4d948a5782c0631c38', 'payload/astral-hwmon.ko': '03d81f8b9aed4a75caac136b2b4ae59521accc5dc35a1be033f8e6f60ff16845', 'payload/licenses/GPL-2.0.txt': 'edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6', 'payload/licenses/MIT.txt': '1fd5e6615fcd24827864b425c023fca6a7d027115935f436880bb00754edf722', 'payload/units/astral-guard-poweroff.service': '3f1582f8710adaabda72fc62b0a0119cc3798157e3f8205ef4df4111941ddd5f', 'payload/units/astral-guard.service': 'd9aaa82cb641afda0e604664d7b52e0602761ad8cffe96003550fe1c6a12ae4f', 'payload/units/astral-guard.timer': 'd5410290a64047859fe16ab7a81dcab0014e8c5ec7365422e75d82652e71b8a5', 'payload/units/astral-hwmon.service': 'c87a430b593adc80985b0dd18a3051fca1cb4739157a362a9f3ea2fe82ae74a4', 'ugc-astral-fresh-install.py': '00dc15b9e60f948bf595e07dcef9398661b587e557fb1f8d3cf891ec2b152381', 'ugc-astral-helper.py': 'f7cbdbbb38df3da0cf7450e78510f5441158589eb289551ee2317ab3340b8efe'}
+PINNED = {'payload/SHA256SUMS': '4b501d112598fdbdc17f3fce1b0e561dfdc727b4d7de97768bd342708184b346', 'payload/astral-guard': '1d0cddf86c3b5a0b44174ea2b9b0f6881b65d4f78a399a4d948a5782c0631c38', 'payload/astral-hwmon.ko': '03d81f8b9aed4a75caac136b2b4ae59521accc5dc35a1be033f8e6f60ff16845', 'payload/licenses/GPL-2.0.txt': 'edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6', 'payload/licenses/MIT.txt': '1fd5e6615fcd24827864b425c023fca6a7d027115935f436880bb00754edf722', 'payload/units/astral-guard-poweroff.service': '3f1582f8710adaabda72fc62b0a0119cc3798157e3f8205ef4df4111941ddd5f', 'payload/units/astral-guard.service': 'd9aaa82cb641afda0e604664d7b52e0602761ad8cffe96003550fe1c6a12ae4f', 'payload/units/astral-guard.timer': 'd5410290a64047859fe16ab7a81dcab0014e8c5ec7365422e75d82652e71b8a5', 'payload/units/astral-hwmon.service': '6ec5448bd6789615c8b6b5ab33596cc0ad16915cddfe4582a777fa0ef799800e', 'payload/units/ugc-astral-kernel-prepare.service': 'f5fbd09eadaef790a6b9f27865939fefe02957ef041080c240d9ceb7205ba566', 'ugc-astral-fresh-install.py': '3fb2a5a04ed7e78585918b347227879fa4e41ce5b18d8dee6f46f6e26cfe4cf7', 'ugc-astral-helper.py': 'f7cbdbbb38df3da0cf7450e78510f5441158589eb289551ee2317ab3340b8efe'}
 def trusted(path, directory=False):
     path = Path(os.path.abspath(path))
     for part in (path, *path.parents):
@@ -65,6 +65,20 @@ def main():
         raise RuntimeError('Expected exactly: install-fresh')
     trusted(__file__)
     stage = trusted(STAGE, directory=True)
+
+    # Recovery files were authenticated by the signed release provisioner.
+    # Verify their root-owned staged locations before fresh installation.
+    recovery_files = (
+        'ugc-astral-kernel-recovery.py',
+        'kernel-source/Kbuild',
+        'kernel-source/astral.h',
+        'kernel-source/astral_detect.c',
+        'kernel-source/astral_hwmon.c',
+        'kernel-source/astral_regs.c',
+    )
+    for name in recovery_files:
+        trusted(stage / name)
+
     if BASE.exists() or BASE.is_symlink():
         raise RuntimeError('Existing Astral manager detected: refusing installation')
     parent = trusted(BASE.parent, directory=True)

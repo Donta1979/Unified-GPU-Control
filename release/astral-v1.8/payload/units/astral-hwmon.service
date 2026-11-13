@@ -1,6 +1,7 @@
 [Unit]
 Description=Load ASUS Astral 12VHPWR hardware monitor
-After=local-fs.target
+After=local-fs.target ugc-astral-kernel-prepare.service
+Requires=ugc-astral-kernel-prepare.service
 
 [Service]
 User=root

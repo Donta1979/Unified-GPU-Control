@@ -17,7 +17,8 @@ TARGETS = {
     'astral-hwmon.ko': Path('/var/usrlocal/lib/astral-hwmon/astral-hwmon.ko'),
     **{f'units/{name}': Path('/etc/systemd/system') / name for name in (
         'astral-hwmon.service', 'astral-guard.service',
-        'astral-guard.timer', 'astral-guard-poweroff.service')},
+        'astral-guard.timer', 'astral-guard-poweroff.service',
+        'ugc-astral-kernel-prepare.service')},
 }
 EXPECTED = set(TARGETS) | {'licenses/GPL-2.0.txt', 'licenses/MIT.txt'}
 
@@ -58,13 +59,40 @@ def preflight():
         secure_file(p)
         if hashlib.sha256(p.read_bytes()).hexdigest() != digest:
             raise RuntimeError(f'Payload checksum mismatch: {name}')
-    if run('modinfo', '-F', 'vermagic', str(PAYLOAD / 'astral-hwmon.ko')).split()[0] != os.uname().release:
-        raise RuntimeError('Kernel module mismatch')
+    recovery = Path('/var/lib/ugc/astral-release/ugc-astral-kernel-recovery.py')
+    if not recovery.is_file() or recovery.is_symlink():
+        raise RuntimeError('Trusted kernel recovery helper missing')
+    if recovery.stat().st_uid != 0 or recovery.stat().st_mode & 0o022:
+        raise RuntimeError('Unsafe kernel recovery helper')
+    # The packaged module may target an earlier Bazzite kernel.
+    # Its checksum was authenticated above. The required preparation service
+    # rebuilds an incompatible installed module from pinned, trusted source
+    # before astral-hwmon.service is allowed to start.
+    packaged_vermagic = run(
+        'modinfo', '-F', 'vermagic',
+        str(PAYLOAD / 'astral-hwmon.ko')
+    ).split()
+    if not packaged_vermagic:
+        raise RuntimeError('Packaged kernel module has no vermagic')
+    if packaged_vermagic[0] != os.uname().release:
+        source_dir = Path('/var/lib/ugc/astral-release/kernel-source')
+        required = (
+            'SOURCE-SHA256.json', 'Kbuild', 'astral.h',
+            'astral_detect.c', 'astral_hwmon.c', 'astral_regs.c'
+        )
+        if not source_dir.is_dir() or source_dir.is_symlink():
+            raise RuntimeError('Trusted kernel source unavailable')
+        for name in required:
+            candidate = source_dir / name
+            secure_file(candidate)
+        build = Path('/lib/modules') / os.uname().release / 'build'
+        if not build.is_dir():
+            raise RuntimeError('Matching kernel build directory unavailable')
     if any(p.exists() or p.is_symlink() for p in TARGETS.values()):
         raise RuntimeError('Existing or partial installation; no changes made')
     if Path('/sys/module/astral_hwmon').exists():
         raise RuntimeError('Module already loaded; no changes made')
-    for unit in ('astral-hwmon.service', 'astral-guard.service', 'astral-guard.timer', 'astral-guard-poweroff.service'):
+    for unit in ('astral-hwmon.service', 'astral-guard.service', 'astral-guard.timer', 'astral-guard-poweroff.service', 'ugc-astral-kernel-prepare.service'):
         if run('systemctl', 'show', unit, '-p', 'LoadState', '--value') != 'not-found':
             raise RuntimeError(f'Existing systemd unit detected: {unit}')
 
@@ -113,6 +141,8 @@ def fresh_install():
         # Once activation begins, never tear down potentially live protection
         # automatically on an uncertain systemd outcome.
         activation_attempted = True
+        run('systemctl', 'enable', 'ugc-astral-kernel-prepare.service')
+        enabled.append('ugc-astral-kernel-prepare.service')
         run('systemctl', 'enable', 'astral-hwmon.service')
         enabled.append('astral-hwmon.service')
         run('systemctl', 'start', 'astral-hwmon.service')

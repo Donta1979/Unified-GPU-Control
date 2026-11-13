@@ -1,0 +1,15 @@
+[Unit]
+Description=UGC Astral Sense Pin kernel compatibility preparation
+After=local-fs.target
+Before=astral-hwmon.service
+AssertPathExists=/var/lib/ugc/astral-release/ugc-astral-kernel-recovery.py
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+ExecStart=/usr/bin/python3 /var/lib/ugc/astral-release/ugc-astral-kernel-recovery.py prepare
+TimeoutStartSec=240
+
+[Install]
+WantedBy=multi-user.target

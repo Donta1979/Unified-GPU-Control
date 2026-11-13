@@ -135,24 +135,35 @@ def recover():
     trusted(STAGE, True)
     # Serialize UGC recovery attempts. A separate third-party driver manager
     # may still race; never unload an already loaded module.
-    with open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600) as lock:
+    with os.fdopen(os.open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600), 'r+') as lock:
         info = os.fstat(lock.fileno())
         if info.st_uid != 0 or info.st_mode & 0o077 or not stat.S_ISREG(info.st_mode):
             raise RuntimeError('Unsafe recovery lock')
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         state = inspect()
         if loaded():
+            if sys.argv[1:] == ['prepare'] and not state['kernel_mismatch']:
+                return {'status': 'already-loaded', 'kernel': state['kernel']}
             raise RuntimeError('Astral module already loaded; refusing replacement')
         if not state['kernel_mismatch']:
+            if sys.argv[1:] == ['prepare']:
+                return {'status': 'compatible', 'kernel': state['kernel']}
             raise RuntimeError('No installed kernel mismatch; no replacement needed')
         verify_source()
         kernel = state['kernel']
         build = Path('/lib/modules') / kernel / 'build'
         if not build.is_dir():
             raise RuntimeError('Matching kernel build directory unavailable')
-        backup = MODULE.parent / ('astral-hwmon.ko.backup-' + state['installed_kernel'])
-        if backup.exists() or backup.is_symlink():
-            raise RuntimeError('Persistent backup already exists; refusing overwrite')
+        # Preserve every previous kernel backup. Repeated Bazzite updates
+        # and rollbacks must never overwrite or discard an existing backup.
+        backup_base = MODULE.parent / ('astral-hwmon.ko.backup-' + state['installed_kernel'])
+        backup = backup_base
+        suffix = 0
+        while backup.exists() or backup.is_symlink():
+            suffix += 1
+            if suffix > 10000:
+                raise RuntimeError('Too many persistent kernel backups')
+            backup = Path(str(backup_base) + '.' + str(suffix))
         # Use a root-owned build directory; never compile user-controlled files.
         with tempfile.TemporaryDirectory(prefix='.ugc-astral-build-', dir=STAGE) as workname:
             work = Path(workname)
@@ -191,6 +202,11 @@ def recover():
                         raise RuntimeError('Installed module vermagic mismatch')
                     # Driver first, guard timer second; do not invoke the guard
                     # executable as a simulated emergency test.
+                    if sys.argv[1:] == ['prepare']:
+                        if vermagic(MODULE) != kernel:
+                            raise RuntimeError('Prepared module kernel mismatch')
+                        return {'status': 'prepared', 'kernel': kernel,
+                                'backup': str(backup), 'module_sha256': sha(MODULE)}
                     command('/usr/bin/systemctl', 'enable', '--now', 'astral-hwmon.service', timeout=45)
                     if not loaded():
                         raise RuntimeError('Astral driver failed to load')
@@ -209,8 +225,8 @@ def recover():
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] != ['recover']:
-        raise SystemExit('Usage: ugc-astral-kernel-recovery.py recover')
+    if sys.argv[1:] not in (['recover'], ['prepare']):
+        raise SystemExit('Usage: ugc-astral-kernel-recovery.py recover|prepare')
     try:
         print(json.dumps(recover(), sort_keys=True))
     except Exception as exc:
