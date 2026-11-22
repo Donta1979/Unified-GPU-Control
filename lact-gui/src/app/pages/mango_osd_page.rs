@@ -352,6 +352,29 @@ pub fn make_mango_osd_page() -> gtk::Box {
         toggles.borrow_mut().push((key, toggle));
     }
     root.append(&editor_grid);
+
+    // Native MangoHud FPS limiter. Zero means unlimited.
+    let limiter_title = gtk::Label::new(Some("FPS limiter"));
+    limiter_title.add_css_class("title-3");
+    limiter_title.set_xalign(0.0);
+    root.append(&limiter_title);
+
+    let limiter_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let fps_limit_entry = gtk::Entry::new();
+    fps_limit_entry.set_hexpand(true);
+    fps_limit_entry.set_placeholder_text(Some("Example: 60,120,144,0"));
+    fps_limit_entry.set_text(config_value(&initial, "fps_limit").unwrap_or(""));
+    limiter_row.append(&gtk::Label::new(Some("FPS limits:")));
+    limiter_row.append(&fps_limit_entry);
+    root.append(&limiter_row);
+
+    let limiter_note = gtk::Label::new(Some(
+        "Comma-separated FPS limits; 0 means unlimited. An empty field leaves the existing setting unchanged. MangoHud's existing limiter method and toggle shortcut are preserved.",
+    ));
+    limiter_note.set_wrap(true);
+    limiter_note.set_xalign(0.0);
+    root.append(&limiter_note);
+
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     let save = gtk::Button::with_label("Save MangoHud settings");
     save.add_css_class("suggested-action");
@@ -722,6 +745,7 @@ pub fn make_mango_osd_page() -> gtk::Box {
         let x_spin = x_spin.clone();
         let y_spin = y_spin.clone();
         let opacity_spin = opacity_spin.clone();
+        let fps_limit_entry = fps_limit_entry.clone();
         save.connect_clicked(move |_| {
             let mut content = read_config()
                 .filter(|(p, _)| !p.starts_with("/etc/"))
@@ -742,6 +766,27 @@ pub fn make_mango_osd_page() -> gtk::Box {
                 "background_alpha",
                 &format!("{:.2}", opacity_spin.value()),
             );
+            let limits = fps_limit_entry.text();
+            let limits = limits.trim();
+            if !limits.is_empty() {
+                let valid = limits.split(',').all(|part| {
+                    let part = part.trim();
+                    !part.is_empty()
+                        && part.parse::<u32>().is_ok()
+                });
+                if !valid {
+                    feedback.set_text(
+                        "Invalid FPS limits. Use non-negative integers separated by commas, for example 60,120,144,0."
+                    );
+                    return;
+                }
+                let normalized = limits.split(',')
+                    .map(str::trim)
+                    .collect::<Vec<_>>()
+                    .join(",");
+                content = set_value_option(&content, "fps_limit", &normalized);
+            }
+
             match save_mangohud(&content) {
                 Ok(path) => feedback.set_text(&format!(
                     "Saved: {}. Restart or reload MangoHud in the game to see changes.",
@@ -758,12 +803,14 @@ pub fn make_mango_osd_page() -> gtk::Box {
         let x_spin = x_spin.clone();
         let y_spin = y_spin.clone();
         let opacity_spin = opacity_spin.clone();
+        let fps_limit_entry = fps_limit_entry.clone();
         reload.connect_clicked(move |_| {
             let content = read_config().map(|(_, c)| c).unwrap_or_default();
             for (key, toggle) in toggles.borrow().iter() {
                 toggle.set_active(metric_enabled(&content, key));
             }
             load_position(&content, &position_select, &x_spin, &y_spin, &opacity_spin);
+            fps_limit_entry.set_text(config_value(&content, "fps_limit").unwrap_or(""));
             feedback.set_text("Settings reloaded from disk; no files changed.");
         });
     }

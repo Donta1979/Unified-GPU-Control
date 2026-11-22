@@ -325,9 +325,31 @@ else
 fi
 
 echo
-echo "Installation checks completed."
-echo "Existing GPU safety services were not deliberately changed."
+echo "=================================================="
 if ! installed "$APP_ID"; then
-    echo "ERROR: UGC was not installed. See the messages above."
+    echo "     UNIFIED GPU CONTROL - INSTALLATION FAILED"
+    echo "=================================================="
+    echo "UGC was not installed. Review the errors above."
     exit 1
 fi
+
+echo "     UNIFIED GPU CONTROL - INSTALLATION COMPLETE"
+echo "=================================================="
+echo "Unified GPU Control is installed."
+echo "You can launch it from your application menu."
+echo
+echo "ASTRAL GUARD STATUS"
+if astral_status; then
+    echo "Monitoring services and sensors detected."
+    echo "Emergency shutdown operation was not tested."
+else
+    echo "WARNING: Astral protection could not be fully verified."
+    echo "This does not mean UGC installation failed."
+    echo "On supported ASUS Astral GPUs, verify protection"
+    echo "before relying on emergency safeguards."
+fi
+echo
+echo "Existing GPU safety services were not deliberately changed."
+echo "=================================================="
+echo "                 INSTALLER FINISHED"
+echo "=================================================="

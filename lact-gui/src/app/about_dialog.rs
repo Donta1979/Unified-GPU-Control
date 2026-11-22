@@ -29,11 +29,13 @@ impl relm4::Component for AboutDialog {
                 "Unified GPU monitoring, tuning, Astral Guard and MangoHud configuration.\n\nBased on LACT {GUI_VERSION} ({GIT_COMMIT})."
             ),
             set_developers: &[
-                "Donta1979 - Unified GPU Control",
+                "Donta1979 - Unified GPU Control development and integration",
                 "Ilya Zlobintsev - Original LACT developer",
                 "LACT contributors",
+                "FlightlessMango and MangoHud contributors",
+                "Astral Guard / astral-hwmon upstream contributors",
             ],
-            set_copyright: "Copyright © 2023 Ilya Zlobintsev and LACT contributors",
+            set_copyright: "UGC integration © 2026 Donta1979; LACT © 2023 Ilya Zlobintsev and contributors. Third-party components retain their respective copyrights.",
             set_website: REPO_URL,
             set_license_type: gtk::License::MitX11,
         }
